@@ -6,7 +6,7 @@ import json
 import os
 import random
 import time
-
+import torch
 import numpy
 # import tensorflow as tf
 
@@ -176,12 +176,13 @@ class NeuralBeliefTracker:
         if self.gpu in ["True", "true"]:
             self.device = torch.device("cuda:0")
         self.dtype = torch.float
+        self.tensor_type = torch.FloatTensor
 
         # Neural Net Initialisation (keep variables packed so we can move them to either method):
         self.model_variables = {}
 
         for slot in dialogue_ontology:
-            print("Initialisation of model variables for slot:", slot)
+            print("Initialisation of model variables for slot: " + slot)
             if slot == "request":
 
                 slot_vectors = numpy.zeros((len(dialogue_ontology[slot]), 300), dtype="float32")
@@ -196,7 +197,9 @@ class NeuralBeliefTracker:
                                                               use_delex_features=self.use_delex_features,
                                                               use_softmax=False,
                                                               value_specific_decoder=self.value_specific_decoder,
-                                                              learn_belief_state_update=self.learn_belief_state_update,word_vectors_dict=word_vectors)
+                                                              learn_belief_state_update=self.learn_belief_state_update,
+                                                              word_vectors_dict=word_vectors, dtype=self.dtype,
+                                                              device=self.device, tensor_type=self.tensor_type)
             else:
 
                 slot_vectors = numpy.zeros((len(dialogue_ontology[slot]) + 1, 300), dtype="float32")  # +1 for None
@@ -211,7 +214,8 @@ class NeuralBeliefTracker:
                                                               use_delex_features=self.use_delex_features, \
                                                               use_softmax=True,
                                                               value_specific_decoder=self.value_specific_decoder,
-                                                              learn_belief_state_update=self.learn_belief_state_update,word_vectors_dict=word_vectors)
+                                                              learn_belief_state_update=self.learn_belief_state_update,
+                                                              word_vectors_dict=word_vectors)
 
         self.dialogue_ontology = dialogue_ontology
 

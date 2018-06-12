@@ -5,8 +5,8 @@ import math
 import string
 import sys
 from copy import deepcopy
- # import NeuralBeliefTracker
-from neuralBeliefTracker import NeuralBeliefTracker
+
+from code.neural_belief_tracker import NeuralBeliefTracker
 
 global_var_asr_count = 1
 
