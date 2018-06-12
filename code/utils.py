@@ -9,6 +9,7 @@ import numpy
 This script supports all dictionary IO, helper function, etc. 
 '''
 
+
 def xavier_vector(word, D=300):
     """
     Returns a D-dimensional vector for the word.
@@ -32,11 +33,13 @@ def xavier_vector(word, D=300):
 def hash_string(s):
     return abs(hash(s)) % (10 ** 8)
 
+
 def softmax(x):
     """Compute softmax values for each sets of scores in x."""
     sf = numpy.exp(x)
     sf = sf / numpy.sum(sf, axis=0)
     return sf
+
 
 def load_word_vectors(file_destination, primary_language="english"):
     """
@@ -46,7 +49,8 @@ def load_word_vectors(file_destination, primary_language="english"):
     # print "XAVIER - returning null dictionary"
     # return {}
 
-    print("Loading pretrained word vectors from", file_destination, "- treating", primary_language, "as the primary language.")
+    print("Loading pretrained word vectors from", file_destination, "- treating", primary_language,
+          "as the primary language.")
     word_dictionary = {}
 
     lp = {}
@@ -77,18 +81,21 @@ def load_word_vectors(file_destination, primary_language="english"):
             transformed_key = transformed_key.replace(language_key, "")
 
             try:
-                transformed_key = unicode(transformed_key)
+                transformed_key = str(transformed_key)
             except:
-                print("Can't convert the key to unicode:", transformed_key)
+                # print("Can't convert the key to unicode:", transformed_key)
+                continue
 
             word_dictionary[transformed_key] = numpy.fromstring(line[1], dtype="float32", sep=" ")
 
             if word_dictionary[transformed_key].shape[0] != 300:
                 print(transformed_key, word_dictionary[transformed_key].shape)
 
-    print(len(word_dictionary), "vectors loaded from", file_destination)
+    print(len(word_dictionary), "vectors loaded from",
+          file_destination)  # it could take a few minutes to load 86407 words in english
 
     return normalise_word_vectors(word_dictionary)
+
 
 def normalise_word_vectors(word_vectors, norm=1.0):
     """
@@ -99,3 +106,11 @@ def normalise_word_vectors(word_vectors, norm=1.0):
         word_vectors[word] = word_vectors[word] * norm
     return word_vectors
 
+
+def w2i(key_list):
+    return {k: v for v, k in enumerate(key_list)}
+
+
+def i2w(key_list):
+    assert len(key_list) == len(set(key_list))
+    return {v: k for v, k in enumerate(key_list)}

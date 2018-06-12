@@ -1,3 +1,8 @@
+import torch
+from torch import nn
+
+from code.utils import w2i, i2w
+
 
 def define_CNN_model(utterance_representations_full, num_filters=300, vector_dimension=300,
                      longest_utterance_length=40):
@@ -36,7 +41,8 @@ def define_CNN_model(utterance_representations_full, num_filters=300, vector_dim
 
 def model_definition(vector_dimension, label_count, slot_vectors, value_vectors, use_delex_features=False,
                      use_softmax=True, value_specific_decoder=False, learn_belief_state_update=True,
-                     word_vectors_dict=None):
+                     word_vectors_dict=None, dtype=torch.float, device=torch.device("cpu"),
+                     tensor_type=torch.FloatTensor):
     """
     This method defines the model and returns the required TensorFlow operations.
 
@@ -68,13 +74,12 @@ def model_definition(vector_dimension, label_count, slot_vectors, value_vectors,
     else:
         label_size = label_count
 
+    # From v0.4 there is a new function from_pretrained() which makes loading an embedding very easy. Here is an example from the documentation.
+    # https://stackoverflow.com/questions/49710537/pytorch-gensim-how-to-load-pre-trained-word-embeddings
 
-    input(word_vectors_dict.values()) # what type, should become torch.FloatTensor
-    input(word_vectors_dict.keys())
-
-    # w2i(key_list)
-    #
-
+    w2i_dict = w2i(word_vectors_dict.keys())
+    i2w_dict = i2w(word_vectors_dict.keys())
+    embedding = nn.Embedding.from_pretrained(tensor_type(word_vectors_dict.values()))
 
     # these are actual NN hyperparameters that we might want to tune at some point:
     hidden_units_1 = 100
@@ -85,15 +90,27 @@ def model_definition(vector_dimension, label_count, slot_vectors, value_vectors,
     print("Hidden layer size:", hidden_units_1, "Label Size:", label_size, "Use Softmax:", use_softmax,
           "Use Delex Features:", use_delex_features)
 
-    utterance_representations_full = tf.placeholder(tf.float32, [None, longest_utterance_length,
-                                                                 vector_dimension])  # full feature vector, which we want to convolve over.
-    utterance_representations_delex = tf.placeholder(tf.float32, [None, label_size])  # I guess: delexicalized
-    #    utterance_representations_delex = tf.placeholder(tf.float32, [None, label_size, 40, vector_dimension])
+    # here we define input and output Tensor shape, as in tf, might be deprecated later
+    # utterance_representations_full = tf.placeholder(tf.float32, [None, longest_utterance_length,
+    #                                                              vector_dimension])  # full feature vector, which we want to convolve over.
+    utterance_representations_full = torch.randn([None, longest_utterance_length, vector_dimension], device=device,
+                                                 dtype=dtype, requires_grad=False)
 
-    system_act_slots = tf.placeholder(tf.float32, shape=(None, vector_dimension))  # just slots, for requestables.
+    # utterance_representations_delex = tf.placeholder(tf.float32, [None, label_size])  # I guess: delexicalized
+    utterance_representation_delex = torch.randn([None, label_size], device=device,
+                                                 dtype=dtype, requires_grad=False)
 
-    system_act_confirm_slots = tf.placeholder(tf.float32, shape=(None, vector_dimension))
-    system_act_confirm_values = tf.placeholder(tf.float32, shape=(None, vector_dimension))
+    # system_act_slots = tf.placeholder(tf.float32, shape=(None, vector_dimension))  # just slots, for requestables.
+    system_act_slots = torch.randn([None, vector_dimension], device=device,
+                                   dtype=dtype, requires_grad=False)
+
+    # system_act_confirm_slots = tf.placeholder(tf.float32, shape=(None, vector_dimension))
+    system_act_confirm_slots = torch.randn([None, vector_dimension], device=device,
+                                           dtype=dtype, requires_grad=False)
+    
+    # system_act_confirm_values = tf.placeholder(tf.float32, shape=(None, vector_dimension))
+    system_act_confirm_values = torch.randn([None, vector_dimension], device=device,
+                                            dtype=dtype, requires_grad=False)
 
     # slot_values =  tf.placeholder(tf.float32, shape=(None, vector_dimension))
     # candidate_values = tf.placeholder(tf.float32, shape=(None, vector_dimension))
