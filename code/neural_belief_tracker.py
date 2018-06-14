@@ -1,4 +1,4 @@
-import ConfigParser
+import configparser as ConfigParser
 import codecs
 import json
 import os
@@ -73,7 +73,7 @@ class NeuralBeliefTracker:
         dialogue_ontology = dialogue_ontology["informable"]
         slots = dialogue_ontology.keys()  # ["address","price range",...]
 
-        word_vector_size = random.choice(word_vectors.values()).shape[0]
+        word_vector_size = word_vectors["tag-slot"].shape[0]
         self.embedding_dim = word_vector_size
 
         # a bit of hard-coding to make our lives easier.
@@ -189,7 +189,9 @@ class NeuralBeliefTracker:
 
         self.w2i_dict = w2i(word_vectors.keys())
         self.i2w_dict = i2w(word_vectors.keys())
-        embedding = torch.nn.Embedding.from_pretrained(self.tensor_type(word_vectors.values()))
+
+        embedding_value_array = np.array(list(word_vectors.values())).astype(float)
+        embedding = torch.nn.Embedding.from_pretrained(self.tensor_type(embedding_value_array))
         # input(embedding)
         embedding.weight.requires_grad = False
 
@@ -576,10 +578,16 @@ class NeuralBeliefTracker:
             #
             # input()
 
+            # print(self.embedding(
+            #             torch.LongTensor([self.w2i_dict[str("place")]])).squeeze(0).shape)
+            #
+            # print(current_requested_vector.shape)
+            # input("shape valid match?")
+
             for requested_slot in requested_slots:
                 if requested_slot != "":
                     current_requested_vector += self.embedding(
-                        torch.LongTensor([self.w2i_dict[str(requested_slot)]]))  # add all requests up
+                        torch.LongTensor([self.w2i_dict[str(requested_slot)]])).squeeze(0)  # add all requests up
 
             requested_slot_vectors.append(current_requested_vector)
 
@@ -598,19 +606,19 @@ class NeuralBeliefTracker:
                 if current_cslot != "" and current_cvalue != "":  # iff valid (slot,value) pair
                     if " " not in current_cslot:
                         current_conf_slot_vector += self.embedding(
-                            torch.LongTensor([self.w2i_dict[str(current_cslot)]]))
+                            torch.LongTensor([self.w2i_dict[str(current_cslot)]])).squeeze(0)
                     else:
                         words_in_example = current_cslot.split()
                         for cword in words_in_example:
-                            current_conf_slot_vector += self.embedding(torch.LongTensor([self.w2i_dict[str(cword)]]))
+                            current_conf_slot_vector += self.embedding(torch.LongTensor([self.w2i_dict[str(cword)]])).squeeze(0)
 
                     if " " not in current_cvalue:
                         current_conf_value_vector += self.embedding(
-                            torch.LongTensor([self.w2i_dict[str(current_cvalue)]]))
+                            torch.LongTensor([self.w2i_dict[str(current_cvalue)]])).squeeze(0)
                     else:
                         words_in_example = current_cvalue.split()
                         for cword in words_in_example:
-                            current_conf_value_vector += self.embedding(torch.LongTensor([self.w2i_dict[str(cword)]]))
+                            current_conf_value_vector += self.embedding(torch.LongTensor([self.w2i_dict[str(cword)]])).squeeze(0)
 
             confirm_slots.append(current_conf_slot_vector)
             confirm_values.append(current_conf_value_vector)
@@ -818,7 +826,8 @@ class NeuralBeliefTracker:
                 y_labels[idx, :] = labels[idx]
 
         if target_slot != "request":
-            y_labels[positive_count:, label_count - 1] = 1  # NONE, 0-indexing, starting from index positive_count, all are negative cases
+            y_labels[positive_count:,
+            label_count - 1] = 1  # NONE, 0-indexing, starting from index positive_count, all are negative cases
 
         # if target_slot == "request" then all zero?
 
