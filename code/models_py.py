@@ -1,7 +1,6 @@
 import torch
 from torch import nn
-
-from code.utils import w2i, i2w
+import torch.nn.functional as F
 
 
 def define_CNN_model(utterance_representations_full, num_filters=300, vector_dimension=300,
@@ -37,6 +36,44 @@ def define_CNN_model(utterance_representations_full, num_filters=300, vector_dim
         hidden_representation += tf.reshape(tf.concat(pooled, 3), [-1, num_filters])
 
     return hidden_representation
+
+
+class NBT_model(nn.Module):
+
+    def __init__(self, vector_dimension, label_count, slot_ids, value_ids, use_delex_features=False,
+                 use_softmax=True, value_specific_decoder=False, learn_belief_state_update=True,
+                 embedding=None, dtype=torch.float, device=torch.device("cpu"),
+                 tensor_type=torch.FloatTensor, slot_name=None, value_list=None):
+        super(NBT_model, self).__init__()
+
+        slot_emb = embedding(slot_ids)
+        value_emb = embedding(value_ids)
+        self.slot_value_pair_emb = torch.cat((slot_emb, value_emb), dim=1)
+
+        self.w_candidates = nn.Linear(vector_dimension * 2, vector_dimension, bias=True)  # equation (7) in paper 1
+
+        self.slot_name = slot_name
+        self.value_list = value_list
+
+        self.conv1 = nn.Conv2d(3, 6, 5)
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 10)
+
+    def forward(self, utterance_representations_full):
+        c = F.sigmoid(self.w_candidates(self.slot_value_pair_emb))  # equation (7) in paper 1
+
+        # utterance_representations_full shape [None, longest_utterance_length, vector_dimension]
+
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(-1, 16 * 5 * 5)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 
 def model_definition(vector_dimension, label_count, slot_vectors, value_vectors, use_delex_features=False,
@@ -77,14 +114,9 @@ def model_definition(vector_dimension, label_count, slot_vectors, value_vectors,
     # From v0.4 there is a new function from_pretrained() which makes loading an embedding very easy. Here is an example from the documentation.
     # https://stackoverflow.com/questions/49710537/pytorch-gensim-how-to-load-pre-trained-word-embeddings
 
-    w2i_dict = w2i(word_vectors_dict.keys())
-    i2w_dict = i2w(word_vectors_dict.keys())
-    embedding = nn.Embedding.from_pretrained(tensor_type(word_vectors_dict.values()))
-
     # these are actual NN hyperparameters that we might want to tune at some point:
     hidden_units_1 = 100
     longest_utterance_length = 40
-
     summary_feature_count = 10
 
     print("Hidden layer size:", hidden_units_1, "Label Size:", label_size, "Use Softmax:", use_softmax,
@@ -107,7 +139,7 @@ def model_definition(vector_dimension, label_count, slot_vectors, value_vectors,
     # system_act_confirm_slots = tf.placeholder(tf.float32, shape=(None, vector_dimension))
     system_act_confirm_slots = torch.randn([None, vector_dimension], device=device,
                                            dtype=dtype, requires_grad=False)
-    
+
     # system_act_confirm_values = tf.placeholder(tf.float32, shape=(None, vector_dimension))
     system_act_confirm_values = torch.randn([None, vector_dimension], device=device,
                                             dtype=dtype, requires_grad=False)
