@@ -3,67 +3,120 @@ from torch import nn
 import torch.nn.functional as F
 
 
-def define_CNN_model(utterance_representations_full, num_filters=300, vector_dimension=300,
-                     longest_utterance_length=40):
-    """
-    Better code for defining the CNN model. 
-    """
-    filter_sizes = [1, 2, 3]
-    hidden_representation = tf.zeros([num_filters], tf.float32)
-
-    pooled_outputs = []
-    for i, filter_size in enumerate(filter_sizes):
-        # with tf.name_scope("conv-maxpool-%s" % filter_size):
-        # Convolution Layer
-        filter_shape = [filter_size, vector_dimension, 1, num_filters]
-        W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
-        b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
-        conv = tf.nn.conv2d(
-            tf.expand_dims(utterance_representations_full, -1),
-            W,
-            strides=[1, 1, 1, 1],
-            padding="VALID")
-        # Apply nonlinearity
-        h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
-        # Maxpooling over the outputs
-        pooled = tf.nn.max_pool(
-            h,
-            ksize=[1, longest_utterance_length - filter_size + 1, 1, 1],
-            strides=[1, 1, 1, 1],
-            padding='VALID')
-        pooled_outputs.append(pooled)
-
-        hidden_representation += tf.reshape(tf.concat(pooled, 3), [-1, num_filters])
-
-    return hidden_representation
-
-
 class NBT_model(nn.Module):
 
     def __init__(self, vector_dimension, label_count, slot_ids, value_ids, use_delex_features=False,
                  use_softmax=True, value_specific_decoder=False, learn_belief_state_update=True,
                  embedding=None, dtype=torch.float, device=torch.device("cpu"),
-                 tensor_type=torch.FloatTensor, slot_name=None, value_list=None):
+                 tensor_type=torch.FloatTensor, target_slot=None, value_list=None, longest_utterance_length=40):
         super(NBT_model, self).__init__()
 
         slot_emb = embedding(slot_ids)
         value_emb = embedding(value_ids)
-        self.slot_value_pair_emb = torch.cat((slot_emb, value_emb), dim=1)
-
+        self.slot_value_pair_emb = torch.cat((slot_emb, value_emb), dim=1)  # cs+cv
         self.w_candidates = nn.Linear(vector_dimension * 2, vector_dimension, bias=True)  # equation (7) in paper 1
 
-        self.slot_name = slot_name
+        self.target_slot = target_slot
         self.value_list = value_list
+        self.filter_sizes = [1, 2, 3]
+        self.num_filters = 300
+        self.hidden_utterance_size = self.num_filters  # * len(filter_sizes)
+        self.vector_dimension = vector_dimension
+        self.longest_utterance_length = longest_utterance_length
 
-        self.conv1 = nn.Conv2d(3, 6, 5)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        # self.conv1 = nn.Conv2d(3, 6, 5)
+        # self.pool = nn.MaxPool2d(2, 2)
+        # self.conv2 = nn.Conv2d(6, 16, 5)
+        # self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        # self.fc2 = nn.Linear(120, 84)
+        # self.fc3 = nn.Linear(84, 10)
 
-    def forward(self, utterance_representations_full):
-        c = F.sigmoid(self.w_candidates(self.slot_value_pair_emb))  # equation (7) in paper 1
+    def define_CNN_model(utterance_representations_full, num_filters=300, vector_dimension=300,
+                         longest_utterance_length=40):
+        """
+        Better code for defining the CNN model.
+        """
+        filter_sizes = [1, 2, 3]
+        hidden_representation = tf.zeros([num_filters], tf.float32)
+
+        pooled_outputs = []
+        for i, filter_size in enumerate(filter_sizes):
+            # with tf.name_scope("conv-maxpool-%s" % filter_size):
+            # Convolution Layer
+            filter_shape = [filter_size, vector_dimension, 1, num_filters]
+            W = tf.Variable(tf.truncated_normal(filter_shape, stddev=0.1), name="W")
+            b = tf.Variable(tf.constant(0.1, shape=[num_filters]), name="b")
+            conv = tf.nn.conv2d(
+                tf.expand_dims(utterance_representations_full, -1),
+                W,
+                strides=[1, 1, 1, 1],
+                padding="VALID")
+            # Apply nonlinearity
+            h = tf.nn.relu(tf.nn.bias_add(conv, b), name="relu")
+            # Maxpooling over the outputs
+            pooled = tf.nn.max_pool(
+                h,
+                ksize=[1, longest_utterance_length - filter_size + 1, 1, 1],
+                strides=[1, 1, 1, 1],
+                padding='VALID')
+            pooled_outputs.append(pooled)
+
+            hidden_representation += tf.reshape(tf.concat(pooled, 3), [-1, num_filters])
+
+        return hidden_representation
+
+    def forward(self, packed_data):
+        """
+
+        :param packed_data: utterance_representations_full, utterance_representation_delex, system_act_slots, system_act_confirm_slots, system_act_confirm_values, y_, y_past_state, keep_prob
+        where y_ size is (None, label_size)
+        :return:
+        """
+        (utterance_representations_full, utterance_representation_delex, system_act_slots, system_act_confirm_slots,
+         system_act_confirm_values, y_, y_past_state, keep_prob) = packed_data
+
+        # print("within model forward "+str(utterance_representations_full))
+
+        candidates_transform = F.sigmoid(self.w_candidates(self.slot_value_pair_emb))  # equation (7) in paper 1
+
+        # print("current target slot is "+self.target_slot)
+        # input("c_size "+str(c.shape))
+
+
+        # TODO 1 after dragon-boat: change CNN filtering -> h_utterance_represetnation code logic in PyTorch
+        h_utterance_representation = self.define_CNN_model(utterance_representations_full)
+
+        print("is utterance shape (None, vector_dim) "+str(h_utterance_representation.shape))
+
+
+        # Next, multiply candidates [label_size, vector_dimension] each with the uttereance representations [None, vector_dimension], to get [None, label_size, vector_dimension]
+        # or utterance [None, vector_dimension] X [vector_dimension, label_size] to get [None, label_size]
+        # h_utterance_representation_candidate_interaction = tf.Variable(tf.zeros([None, label_size, vector_dimension]))
+
+        list_of_value_contributions = []
+
+        # get interaction of utterance with each value, element-wise multiply, equation (8)
+        for value_idx in range(0, len(self.value_list)):
+            list_of_value_contributions.append(h_utterance_representation.mul(candidates_transform[value_idx, :]))
+
+        # TODO 2 after dragon-boat:
+
+        list_of_value_contributions.squeeze
+            list_of_value_contributions.append(
+                tf.multiply(h_utterance_representation, candidates_transform[value_idx, :]))
+
+        h_utterance_representation_candidate_interaction = tf.reshape(
+            tf.transpose(tf.stack(list_of_value_contributions), [1, 0, 2]), [-1, vector_dimension])
+
+
+
+
+
+        y_pred = None
+        # return y_pred
+
+
+
 
         # utterance_representations_full shape [None, longest_utterance_length, vector_dimension]
 
@@ -125,43 +178,43 @@ def model_definition(vector_dimension, label_count, slot_vectors, value_vectors,
     # here we define input and output Tensor shape, as in tf, might be deprecated later
     # utterance_representations_full = tf.placeholder(tf.float32, [None, longest_utterance_length,
     #                                                              vector_dimension])  # full feature vector, which we want to convolve over.
-    utterance_representations_full = torch.randn([None, longest_utterance_length, vector_dimension], device=device,
-                                                 dtype=dtype, requires_grad=False)
+    # utterance_representations_full = torch.randn([None, longest_utterance_length, vector_dimension], device=device,
+    #                                              dtype=dtype, requires_grad=False)
 
     # utterance_representations_delex = tf.placeholder(tf.float32, [None, label_size])  # I guess: delexicalized
-    utterance_representation_delex = torch.randn([None, label_size], device=device,
-                                                 dtype=dtype, requires_grad=False)
+    # utterance_representation_delex = torch.randn([None, label_size], device=device,
+    #                                              dtype=dtype, requires_grad=False)
 
     # system_act_slots = tf.placeholder(tf.float32, shape=(None, vector_dimension))  # just slots, for requestables.
-    system_act_slots = torch.randn([None, vector_dimension], device=device,
-                                   dtype=dtype, requires_grad=False)
+    # system_act_slots = torch.randn([None, vector_dimension], device=device,
+    #                                dtype=dtype, requires_grad=False)
 
     # system_act_confirm_slots = tf.placeholder(tf.float32, shape=(None, vector_dimension))
-    system_act_confirm_slots = torch.randn([None, vector_dimension], device=device,
-                                           dtype=dtype, requires_grad=False)
+    # system_act_confirm_slots = torch.randn([None, vector_dimension], device=device,
+    #                                        dtype=dtype, requires_grad=False)
 
     # system_act_confirm_values = tf.placeholder(tf.float32, shape=(None, vector_dimension))
-    system_act_confirm_values = torch.randn([None, vector_dimension], device=device,
-                                            dtype=dtype, requires_grad=False)
+    # system_act_confirm_values = torch.randn([None, vector_dimension], device=device,
+    #                                         dtype=dtype, requires_grad=False)
 
     # slot_values =  tf.placeholder(tf.float32, shape=(None, vector_dimension))
     # candidate_values = tf.placeholder(tf.float32, shape=(None, vector_dimension))
 
     # Initial (distributional) vectors. Needed for L2 regularisation.
-    W_slots = tf.constant(slot_vectors, name="W_init")
-    W_values = tf.constant(value_vectors, name="W_init")
+    # W_slots = tf.constant(slot_vectors, name="W_init")
+    # W_values = tf.constant(value_vectors, name="W_init")
 
     # output label, i.e. True / False, 1-hot encoded:
-    y_ = tf.placeholder(tf.float32, [None, label_size])
+    # y_ = tf.placeholder(tf.float32, [None, label_size])
 
-    y_past_state = tf.placeholder(tf.float32, [None, label_size])
+    # y_past_state = tf.placeholder(tf.float32, [None, label_size])
 
     # dropout placeholder, 0.5 for training, 1.0 for validation/testing:
-    keep_prob = tf.placeholder("float")
+    # keep_prob = tf.placeholder("float")
 
     # constants useful for evaluation variables further below:
-    ones = tf.constant(1.0, dtype="float")
-    zeros = tf.constant(0.0, dtype="float")
+    # ones = tf.constant(1.0, dtype="float")
+    # zeros = tf.constant(0.0, dtype="float")
 
     hidden_utterance_size = vector_dimension
 
@@ -202,6 +255,9 @@ def model_definition(vector_dimension, label_count, slot_vectors, value_vectors,
 
     h_utterance_representation_candidate_interaction = tf.reshape(
         tf.transpose(tf.stack(list_of_value_contributions), [1, 0, 2]), [-1, vector_dimension])
+
+
+
     # the same transform now runs across each value's vector, multiplying. 
     w_joint_hidden_layer = tf.Variable(tf.random_normal([vector_dimension, hidden_units_1]))
     b_joint_hidden_layer = tf.Variable(tf.zeros([hidden_units_1]))
