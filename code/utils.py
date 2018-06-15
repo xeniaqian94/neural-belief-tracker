@@ -7,7 +7,7 @@ import random
 import string
 from copy import deepcopy
 
-import numpy
+import numpy as np
 import torch
 from torch import nn
 
@@ -24,13 +24,13 @@ def xavier_vector(word, D=300):
     """
 
     seed_value = hash_string(word)
-    numpy.random.seed(seed_value)
+    np.random.seed(seed_value)
 
     neg_value = - math.sqrt(6) / math.sqrt(D)
     pos_value = math.sqrt(6) / math.sqrt(D)
 
-    rsample = numpy.random.uniform(low=neg_value, high=pos_value, size=(D,))
-    norm = numpy.linalg.norm(rsample)
+    rsample = np.random.uniform(low=neg_value, high=pos_value, size=(D,))
+    norm = np.linalg.norm(rsample)
     rsample_normed = rsample / norm
 
     return rsample_normed
@@ -42,8 +42,8 @@ def hash_string(s):
 
 def softmax(x):
     """Compute softmax values for each sets of scores in x."""
-    sf = numpy.exp(x)
-    sf = sf / numpy.sum(sf, axis=0)
+    sf = np.exp(x)
+    sf = sf / np.sum(sf, axis=0)
     return sf
 
 
@@ -92,7 +92,7 @@ def load_word_vectors(file_destination, primary_language="english"):
                 # print("Can't convert the key to unicode:", transformed_key)
                 continue
 
-            word_dictionary[transformed_key] = numpy.fromstring(line[1], dtype="float32", sep=" ")
+            word_dictionary[transformed_key] = np.fromstring(line[1], dtype="float32", sep=" ")
 
             if word_dictionary[transformed_key].shape[0] != 300:
                 print(transformed_key, word_dictionary[transformed_key].shape)
@@ -328,7 +328,7 @@ def binary_mask(example, requestable_count):
     takes a list, i.e. 2,3,4, and if req count is 8, returns: 00111000
     """
 
-    zeros = torch.Tensor(numpy.zeros((requestable_count,), dtype=numpy.float32))
+    zeros = torch.Tensor(np.zeros((requestable_count,), dtype=np.float32))
     for x in example:
         zeros[x] = 1
 
@@ -349,10 +349,9 @@ def delexicalise_utterance_values(utterance, target_slot, target_values):
     else:
         value_count = len(target_values) + 1
 
-    delexicalised_vector = numpy.zeros((value_count,), dtype="float32")
+    delexicalised_vector = torch.FloatTensor(np.zeros((value_count,),dtype="float32"))
 
     for idx, target_value in enumerate(target_values):
-
         if " " + target_value + " " in utterance:
             delexicalised_vector[idx] = 1.0
 

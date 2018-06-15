@@ -136,12 +136,12 @@ class NeuralBeliefTracker:
         if language == "german":
             dontcare_value = "es ist egal"
 
-        for slot_name in slots:
-            if dontcare_value not in dialogue_ontology[slot_name] and slot_name != "request":
+        for slot in slots:
+            if dontcare_value not in dialogue_ontology[slot] and slot != "request":
                 # accounting for all slot values and two special values, dontcare and NONE).
                 # "Find me food in south part of the city"
-                dialogue_ontology[slot_name].append(dontcare_value)
-            for value in dialogue_ontology[slot_name]:
+                dialogue_ontology[slot].append(dontcare_value)
+            for value in dialogue_ontology[slot]:
                 value = str(value)
                 if u" " not in value and value not in word_vectors:
                     word_vectors[str(value)] = xavier_vector(str(value))
@@ -213,7 +213,8 @@ class NeuralBeliefTracker:
                                                        value_specific_decoder=self.value_specific_decoder,
                                                        learn_belief_state_update=self.learn_belief_state_update,
                                                        embedding=embedding, dtype=self.dtype,
-                                                       device=self.device, tensor_type=self.tensor_type, slot_name=slot,
+                                                       device=self.device, tensor_type=self.tensor_type,
+                                                       target_slot=slot,
                                                        value_list=dialogue_ontology[slot])
             else:
                 slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))
@@ -230,7 +231,8 @@ class NeuralBeliefTracker:
                                                        value_specific_decoder=self.value_specific_decoder,
                                                        learn_belief_state_update=self.learn_belief_state_update,
                                                        embedding=embedding, dtype=self.dtype,
-                                                       device=self.device, tensor_type=self.tensor_type, slot_name=slot,
+                                                       device=self.device, tensor_type=self.tensor_type,
+                                                       target_slot=slot,
                                                        value_list=dialogue_ontology[slot])
 
         self.dialogue_ontology = dialogue_ontology
@@ -342,32 +344,36 @@ class NeuralBeliefTracker:
 
         val_data = self.generate_examples(target_slot, fv_validation,
                                           positive_examples_validation,
-                                          negative_examples_validation)  # How is this used, still confused
+                                          negative_examples_validation)
+        # val_data is a tuple of (features_full, features_requested_slots, features_confirm_slots,
+        # features_confirm_values, features_delex, y_labels, features_previous_state)
 
         if val_data is None:
             print("val data is none")
 
         # will be used to save model parameters with best validation scores.
-        saver = tf.train.Saver()
 
-        init = tf.global_variables_initializer()
-        sess = tf.Session()
-        sess.run(init)
+        # saver = tf.train.Saver()
+        #
+        # init = tf.global_variables_initializer()
+        # sess = tf.Session()
+        # sess.run(init)
 
         print_mode = False
+
         # Model training:
 
         best_f_score = -0.01
 
-        print("\nDoing", batches_per_epoch, "randomly drawn batches of size", batch_size, "for", max_epoch,
+        print("\nDoing", batches_per_epoch, "randomly drawn batches of size", batch_size,
+              " per epoch. All together for", max_epoch,
               "training epochs.\n")
         start_time = time.time()
-
         ratio = {}
 
         for slot in dialogue_ontology:
             if slot not in ratio:
-                ratio[slot] = batch_size / 2  # fewer negatives
+                ratio[slot] = int(batch_size / 2)  # fewer negatives - what does this mean?
 
         epoch = 0
         last_update = -1
@@ -384,15 +390,23 @@ class NeuralBeliefTracker:
                 return None
 
             for batch_id in range(batches_per_epoch):
-                random_positive_count = ratio[target_slot]
-                random_negative_count = batch_size - random_positive_count
+                random_positive_count = ratio[target_slot]  # number of randomly drawn negative example
+                random_negative_count = batch_size - random_positive_count  # number of randomly drawn positive example
 
-                batch_data = generate_examples(target_slot, feature_vectors, word_vectors, dialogue_ontology,
-                                               positive_examples, negative_examples, random_positive_count,
-                                               random_negative_count)
+                batch_data = self.generate_examples(target_slot, feature_vectors,
+                                                    positive_examples,
+                                                    negative_examples, random_positive_count,
+                                                    random_negative_count)
 
                 (batch_xs_full, batch_sys_req, batch_sys_conf_slots, batch_sys_conf_values,
                  batch_delex, batch_ys, batch_ys_prev) = batch_data
+
+                # input("training model " + str(self.model_variables[target_slot]))
+
+                # forward pass, which loss to define
+
+                self.model_variables[target_slot]((batch_xs_full, batch_delex, batch_sys_req, batch_sys_conf_slots,
+                                                   batch_sys_conf_values,batch_ys, batch_ys_prev, 0.5))
 
                 [_, cf, cp, cr, ca] = sess.run([train_step, f_score, precision, recall, accuracy],
                                                feed_dict={x_full: batch_xs_full, \
@@ -407,12 +421,10 @@ class NeuralBeliefTracker:
             epoch_print_step = 1
             if epoch % 5 == 0 or epoch == 1:
                 if epoch == 1:
-                    print
-                    "Epoch", "0", "to", epoch, "took", round(time.time() - start_time, 2), "seconds."
+                    print("Epoch", "0", "to", epoch, "took", round(time.time() - start_time, 2), "seconds.")
 
                 else:
-                    print
-                    "Epoch", epoch - 5, "to", epoch, "took", round(time.time() - start_time, 2), "seconds."
+                    print("Epoch", epoch - 5, "to", epoch, "took", round(time.time() - start_time, 2), "seconds.")
                     start_time = time.time()
 
             current_f_score = evaluate_model(dataset_name, sess, model_variables, val_data, target_slot, utterances_val, \
@@ -610,7 +622,8 @@ class NeuralBeliefTracker:
                     else:
                         words_in_example = current_cslot.split()
                         for cword in words_in_example:
-                            current_conf_slot_vector += self.embedding(torch.LongTensor([self.w2i_dict[str(cword)]])).squeeze(0)
+                            current_conf_slot_vector += self.embedding(
+                                torch.LongTensor([self.w2i_dict[str(cword)]])).squeeze(0)
 
                     if " " not in current_cvalue:
                         current_conf_value_vector += self.embedding(
@@ -618,7 +631,8 @@ class NeuralBeliefTracker:
                     else:
                         words_in_example = current_cvalue.split()
                         for cword in words_in_example:
-                            current_conf_value_vector += self.embedding(torch.LongTensor([self.w2i_dict[str(cword)]])).squeeze(0)
+                            current_conf_value_vector += self.embedding(
+                                torch.LongTensor([self.w2i_dict[str(cword)]])).squeeze(0)
 
             confirm_slots.append(current_conf_slot_vector)
             confirm_values.append(current_conf_value_vector)
@@ -790,13 +804,13 @@ class NeuralBeliefTracker:
                                                            self.dialogue_ontology[target_slot])
             # read pure text, generate delex_features
 
-            features_full.append(utterance_fv[0])
+            features_full.append(utterance_fv[0])  # text word vectors
             features_requested_slots.append(utterance_fv[1])
             features_confirm_slots.append(utterance_fv[2])
             features_confirm_values.append(utterance_fv[3])
             features_delex.append(delex_features)
 
-            prev_belief_state_vector = np.zeros((label_count,), dtype="float32")
+            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32"))
 
             if target_slot != "request":
 
@@ -810,15 +824,14 @@ class NeuralBeliefTracker:
             features_previous_state.append(prev_belief_state_vector)
 
         # TODO: change to torch Tensor
-        features_requested_slots = torch.Tensor(np.array(features_requested_slots), dtype=self.dtype)
-        features_confirm_slots = torch.Tensor(np.array(features_confirm_slots), dtype=self.dtype)
-        features_confirm_values = torch.Tensor(np.array(features_confirm_values), dtype=self.dtype)
-        features_full = torch.Tensor(np.array(features_full), dtype=self.dtype)
-        features_delex = torch.Tensor(np.array(features_delex), dtype=self.dtype)
-        features_previous_state = torch.Tensor(np.array(features_previous_state), dtype=self.dtype)
+        features_requested_slots = torch.stack(features_requested_slots)
+        features_confirm_slots = torch.stack(features_confirm_slots)
+        features_confirm_values = torch.stack(features_confirm_values)
+        features_full = torch.stack(features_full)
+        features_delex = torch.stack(features_delex)
+        features_previous_state = torch.stack(features_previous_state)
 
-        y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"),
-                                dtype=self.dtype)
+        y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"))
         for idx in range(0, positive_count):
             if target_slot != "request":
                 y_labels[idx, labels[idx]] = 1
