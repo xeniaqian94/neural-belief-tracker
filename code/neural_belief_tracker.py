@@ -38,6 +38,7 @@ class NeuralBeliefTracker:
         lp["english"] = u"en"
         lp["german"] = u"de"
         lp["italian"] = u"it"
+        self.drop_out = 0.5
 
         try:
             language = config.get("model", "language")
@@ -189,6 +190,7 @@ class NeuralBeliefTracker:
 
         self.w2i_dict = w2i(word_vectors.keys())
         self.i2w_dict = i2w(word_vectors.keys())
+        self.drop_out = 0.5
 
         embedding_value_array = np.array(list(word_vectors.values())).astype(float)
         embedding = torch.nn.Embedding.from_pretrained(self.tensor_type(embedding_value_array))
@@ -215,7 +217,7 @@ class NeuralBeliefTracker:
                                                        embedding=embedding, dtype=self.dtype,
                                                        device=self.device, tensor_type=self.tensor_type,
                                                        target_slot=slot,
-                                                       value_list=dialogue_ontology[slot])
+                                                       value_list=dialogue_ontology[slot], drop_out=self.drop_out)
             else:
                 slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))
                 value_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))
@@ -233,7 +235,7 @@ class NeuralBeliefTracker:
                                                        embedding=embedding, dtype=self.dtype,
                                                        device=self.device, tensor_type=self.tensor_type,
                                                        target_slot=slot,
-                                                       value_list=dialogue_ontology[slot])
+                                                       value_list=dialogue_ontology[slot], drop_out=self.drop_out)
 
         self.dialogue_ontology = dialogue_ontology
 
@@ -405,8 +407,9 @@ class NeuralBeliefTracker:
 
                 # forward pass, which loss to define
 
-                self.model_variables[target_slot]((batch_xs_full, batch_delex, batch_sys_req, batch_sys_conf_slots,
-                                                   batch_sys_conf_values,batch_ys, batch_ys_prev, 0.5))
+                y_pred = self.model_variables[target_slot](
+                    (batch_xs_full, batch_delex, batch_sys_req, batch_sys_conf_slots,
+                     batch_sys_conf_values, batch_ys, batch_ys_prev, 0.5))
 
                 [_, cf, cp, cr, ca] = sess.run([train_step, f_score, precision, recall, accuracy],
                                                feed_dict={x_full: batch_xs_full, \
