@@ -58,6 +58,7 @@ def load_word_vectors(file_destination, primary_language="english"):
     print("Loading pretrained word vectors from", file_destination, "- treating", primary_language,
           "as the primary language.")
     word_dictionary = {}
+    word_dictionary["<eos>"] = xavier_vector("<eos>")
 
     lp = {}
     lp["english"] = u"en_"
@@ -204,7 +205,7 @@ def process_woz_dialogue(woz_dialogue, language, override_en_ontology):
                 current_conf_slot.append("request")
                 current_conf_value.append(each_da)
             else:
-                if type(each_da) is list:
+                if type(each_da) is list:   # e.g. [["area","dontcare"]]
                     current_conf_slot.append(each_da[0])
                     current_conf_value.append(each_da[1])
 
@@ -270,6 +271,7 @@ def load_woz_data(file_path, language, percentage=1.0, override_en_ontology=Fals
     """
     This method loads WOZ dataset as a collection of utterances.
     Testing means load everything, no split.
+    Return: a tuple of pairs. Each pair has strctured utterance+label, with unstrctured JSON object
     """
 
     woz_json = json.load(codecs.open(file_path, "r", "utf-8"))
