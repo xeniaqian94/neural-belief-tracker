@@ -199,7 +199,7 @@ class NeuralBeliefTracker:
         self.drop_out = 0.5
 
         embedding_value_array = np.array(list(word_vectors.values())).astype(float)
-        embedding = torch.nn.Embedding.from_pretrained(self.tensor_type(embedding_value_array))
+        embedding = torch.nn.Embedding.from_pretrained(self.tensor_type(embedding_value_array,device=self.device))
         # input(embedding)
         embedding.weight.requires_grad = False
 
@@ -207,8 +207,8 @@ class NeuralBeliefTracker:
             print("Initialisation of model variables for slot: " + slot)
             if slot == "request":
 
-                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int"))
-                value_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int"))
+                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int",device=self.device))
+                value_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int",device=self.device))
 
                 for value_idx, value in enumerate(dialogue_ontology[slot]):
                     slot_ids[value_idx] = self.w2i_dict[slot]
@@ -225,9 +225,9 @@ class NeuralBeliefTracker:
                                                        target_slot=slot,
                                                        value_list=dialogue_ontology[slot], drop_out=self.drop_out)
             else:
-                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))
+                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int",device=self.device))
                 value_ids = torch.LongTensor(
-                    np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))  # this includes None
+                    np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int",device=self.device))  # this includes None
 
                 for value_idx, value in enumerate(dialogue_ontology[slot]):
                     slot_ids[value_idx] = self.w2i_dict[slot]
@@ -591,7 +591,7 @@ class NeuralBeliefTracker:
 
         for idx, utterance in enumerate(utterances):
 
-            full_fv = torch.Tensor(np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"))
+            # full_fv = torch.Tensor(np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"))
             # np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32")
 
             # use_asr = True
@@ -605,7 +605,7 @@ class NeuralBeliefTracker:
 
             requested_slots = utterances[idx][1]
 
-            current_requested_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"))
+            current_requested_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32",device=self.device))
 
             # requested_slot="area"
             # print("w2i contains this word " + str(str(requested_slot) in self.w2i_dict.keys()))
@@ -623,7 +623,7 @@ class NeuralBeliefTracker:
                 if requested_slot != "":
                     # input("In this example, full_asr is " + str(full_asr) + " requested_slot" + str(requested_slots))
                     current_requested_vector += self.embedding(
-                        torch.LongTensor([self.w2i_dict[str(requested_slot)]])).squeeze(0)  # add all requests up
+                        torch.LongTensor([self.w2i_dict[str(requested_slot)]],device=self.device)).squeeze(0)  # add all requests up
 
             requested_slot_vectors.append(current_requested_vector)
 
@@ -635,8 +635,8 @@ class NeuralBeliefTracker:
             #         input("In this example, full_asr is " + str(full_asr) + " cfm_slot: " + str(cfm_slot)+" value: "+curr_confirm_values[ind])
             #         break
 
-            current_conf_slot_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"))
-            current_conf_value_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"))
+            current_conf_slot_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32",device=self.device))
+            current_conf_value_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32",device=self.device))
 
             confirmation_count = len(curr_confirm_slots)
 
@@ -687,7 +687,7 @@ class NeuralBeliefTracker:
                 # print c_example, asr_coeff
 
                 full_fv = torch.Tensor(
-                    np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"))
+                    np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32",device=self.device))
                 if c_example != "":
                     # print c_example
                     words_utterance = process_turn_hyp(c_example, "en")  # cleaned text: lowercase and normalize
@@ -698,14 +698,14 @@ class NeuralBeliefTracker:
                         word = str(word)
 
                         if word not in self.w2i_dict:
-                            this_vector = self.embedding(torch.LongTensor([self.w2i_dict[self.unk_token]]))
+                            this_vector = self.embedding(torch.LongTensor([self.w2i_dict[self.unk_token]],device=self.device))
                             print("Looping over Utterance and generating data: Generating UNK word vector for",
                                   word.encode('utf-8'))
 
                         try:
                             full_fv[
                             word_idx * self.embedding_dim: (word_idx + 1) * self.embedding_dim] = self.embedding(
-                                torch.LongTensor([self.w2i_dict[str(word)]]))
+                                torch.LongTensor([self.w2i_dict[str(word)]],device=self.device))
                         except:
                             print("Something off with word:", word, word in self.w2i_dict)
 
@@ -800,7 +800,7 @@ class NeuralBeliefTracker:
         features_previous_state = []
 
         # feature vector of the used slot:
-        candidate_slot = self.embedding(torch.LongTensor([self.w2i_dict[str(target_slot)]]))
+        candidate_slot = self.embedding(torch.LongTensor([self.w2i_dict[str(target_slot)]],device=self.device))
 
         # now go through all examples (positive followed by negative).
         for idx_example, example in enumerate(examples):
@@ -841,7 +841,7 @@ class NeuralBeliefTracker:
             features_confirm_values.append(utterance_fv[3])
             features_delex.append(delex_features)
 
-            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32"))
+            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32",device=self.device))
 
             if target_slot != "request":
 
@@ -864,10 +864,10 @@ class NeuralBeliefTracker:
 
         for idx in range(0, positive_count):
             if target_slot != "request":
-                y_labels = torch.Tensor(np.zeros((positive_count + negative_count), dtype="float32"))
+                y_labels = torch.Tensor(np.zeros(positive_count + negative_count), dtype="float32",device=self.device)
                 y_labels[idx] = labels[idx]
             else:
-                y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"))
+                y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32",device=self.device))
                 y_labels[idx, :] = labels[idx]
 
         if target_slot != "request":
