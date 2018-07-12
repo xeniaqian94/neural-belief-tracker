@@ -752,7 +752,7 @@ def main():
     elif do_woz:
         NBT.test_woz()
     else:   # online test
-        previous_belief_state = None
+        previous_belief_state = Noneexex
 
         while True:
 
