@@ -485,6 +485,9 @@ class NeuralBeliefTracker:
                 # reference: torch.save(net.state_dict(), './net.pth')
                 # net.load_state_dict(torch.load('./net.pth'))
 
+            else:
+                break
+
         print("The best parameters achieved over all epochs, at validation metric of", round(best_f_score, 4))
 
     def train(self):
