@@ -6,7 +6,7 @@ import random
 import sys
 import time
 import torch
-import np as np
+import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 
