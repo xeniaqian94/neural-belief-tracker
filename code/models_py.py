@@ -177,7 +177,7 @@ class NBT_model(nn.Module):
             print("predicting non-request prior-softmax, loss is CrossEntropy")
 
         else:
-            y = F.sigmoid(y_presoftmax)  # comparative max is okay?
+            y = F.sigmoid(y_presoftmax).squeeze(2)  # comparative max is okay?
             print("predicting request with sigmoid, loss is L2-MSE")
 
         # y = y.squeeze(2)
