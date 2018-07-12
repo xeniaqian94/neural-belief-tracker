@@ -687,7 +687,7 @@ class NeuralBeliefTracker:
                 # print c_example, asr_coeff
 
                 full_fv = torch.Tensor(
-                    np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32",device=self.device))
+                    np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"),device=self.device)
                 if c_example != "":
                     # print c_example
                     words_utterance = process_turn_hyp(c_example, "en")  # cleaned text: lowercase and normalize
@@ -841,7 +841,7 @@ class NeuralBeliefTracker:
             features_confirm_values.append(utterance_fv[3])
             features_delex.append(delex_features)
 
-            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32",device=self.device))
+            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32"),device=self.device)
 
             if target_slot != "request":
 
