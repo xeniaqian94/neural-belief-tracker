@@ -6,7 +6,7 @@ import random
 import sys
 import time
 import torch
-import numpy as np
+import np as np
 import torch.nn as nn
 import torch.optim as optim
 
@@ -199,7 +199,7 @@ class NeuralBeliefTracker:
         self.drop_out = 0.5
 
         embedding_value_array = np.array(list(word_vectors.values())).astype(float)
-        embedding = torch.nn.Embedding.from_pretrained(self.tensor_type(embedding_value_array,device=self.device))
+        embedding = torch.nn.Embedding.from_pretrained(self.tensor_type(embedding_value_array, device=self.device))
         # input(embedding)
         embedding.weight.requires_grad = False
 
@@ -207,8 +207,8 @@ class NeuralBeliefTracker:
             print("Initialisation of model variables for slot: " + slot)
             if slot == "request":
 
-                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int"),device=self.device)
-                value_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int"),device=self.device)
+                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int"), device=self.device)
+                value_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]), dtype="int"), device=self.device)
 
                 for value_idx, value in enumerate(dialogue_ontology[slot]):
                     slot_ids[value_idx] = self.w2i_dict[slot]
@@ -225,9 +225,9 @@ class NeuralBeliefTracker:
                                                        target_slot=slot,
                                                        value_list=dialogue_ontology[slot], drop_out=self.drop_out)
             else:
-                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"),device=self.device)
+                slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"), device=self.device)
                 value_ids = torch.LongTensor(
-                    np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"),device=self.device)  # this includes None
+                    np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"), device=self.device)  # this includes None
 
                 for value_idx, value in enumerate(dialogue_ontology[slot]):
                     slot_ids[value_idx] = self.w2i_dict[slot]
@@ -294,16 +294,17 @@ class NeuralBeliefTracker:
                 "Can't restore for slot", slot, " - from file:", path_to_load
                 return
 
-            belief_state = sliding_window_over_utterance(sess, utterance, self.word_vectors, self.dialogue_ontology,
-                                                         self.model_variables, slot)
+            belief_state = self.sliding_window_over_utterance(sess, utterance, self.word_vectors,
+                                                              self.dialogue_ontology,
+                                                              self.model_variables, slot)
             belief_states[slot] = belief_state
 
             # Nikola - red flag, this print could be important.
-            predicted_values = return_slot_predictions(belief_state, self.dialogue_ontology[slot], slot, 0.5)
+            predicted_values = self.return_slot_predictions(belief_state, self.dialogue_ontology[slot], slot, 0.5)
             prediction_dict[slot] = predicted_values
 
-            current_bs[slot] = print_belief_state_woz_informable(self.dialogue_ontology[slot], belief_state,
-                                                                 threshold=0.0)  # swap to 0.001 Nikola
+            current_bs[slot] = self.print_belief_state_woz_informable(self.dialogue_ontology[slot], belief_state,
+                                                                      threshold=0.0)  # swap to 0.001 Nikola
 
         return prediction_dict, current_bs
 
@@ -328,10 +329,13 @@ class NeuralBeliefTracker:
             "data/" + dataset_name + "/" + dataset_name + "_validate_" + language + ".json", language)
         val_count = len(utterances_val2)
 
-        utterances_train = utterances_train2 + utterances_val2[0:int(
-            0.75 * val_count)]  # increment training set. Original split: 600+200+400
-        utterances_val = utterances_val2[
-                         int(0.75 * val_count):]  # Current split: 750+50+400  # get real index-ed validation utterances
+        # utterances_train = utterances_train2 + utterances_val2[0:int(
+        #     0.75 * val_count)]  # increment training set. Original split: 600+200+400
+        # utterances_val = utterances_val2[
+        #                  int(0.75 * val_count):]  # Current split: 750+50+400  # get real index-ed validation utterances
+
+        utterances_train = utterances_train2
+        utterances_val = utterances_val2
 
         print("\nTraining using:", dataset_name, " data - Utterance count:", utterance_count, "target_slot ",
               target_slot)
@@ -476,7 +480,7 @@ class NeuralBeliefTracker:
                                str(dataset_name) + "_" + str(target_slot) + "_" + str(exp_name) + "_" + str(
                     percentage) + ".ckpt"
 
-                # torch.save(path_to_save, self.model_variables[target_slot])
+                torch.save(open(path_to_save, "wb"), self.model_variables[target_slot])
 
         print("The best parameters achieved over all epochs, at validation metric of", round(best_f_score, 4))
 
@@ -485,7 +489,6 @@ class NeuralBeliefTracker:
         FUTURE: Train the NBT model with new dataset, slot by slot.
         """
         for slot in self.dialogue_ontology.keys():
-
             # if slot == "request":
             #     continue
             print("\n==============  Training the NBT Model for slot", slot, "===============\n")
@@ -605,7 +608,8 @@ class NeuralBeliefTracker:
 
             requested_slots = utterances[idx][1]
 
-            current_requested_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),device=self.device)
+            current_requested_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),
+                                                    device=self.device)
 
             # requested_slot="area"
             # print("w2i contains this word " + str(str(requested_slot) in self.w2i_dict.keys()))
@@ -623,7 +627,8 @@ class NeuralBeliefTracker:
                 if requested_slot != "":
                     # input("In this example, full_asr is " + str(full_asr) + " requested_slot" + str(requested_slots))
                     current_requested_vector += self.embedding(
-                        torch.LongTensor([self.w2i_dict[str(requested_slot)]],device=self.device)).squeeze(0)  # add all requests up
+                        torch.LongTensor([self.w2i_dict[str(requested_slot)]], device=self.device)).squeeze(
+                        0)  # add all requests up
 
             requested_slot_vectors.append(current_requested_vector)
 
@@ -635,8 +640,10 @@ class NeuralBeliefTracker:
             #         input("In this example, full_asr is " + str(full_asr) + " cfm_slot: " + str(cfm_slot)+" value: "+curr_confirm_values[ind])
             #         break
 
-            current_conf_slot_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),device=self.device)
-            current_conf_value_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),device=self.device)
+            current_conf_slot_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),
+                                                    device=self.device)
+            current_conf_value_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),
+                                                     device=self.device)
 
             confirmation_count = len(curr_confirm_slots)
 
@@ -687,7 +694,8 @@ class NeuralBeliefTracker:
                 # print c_example, asr_coeff
 
                 full_fv = torch.Tensor(
-                    np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"),device=self.device)
+                    np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"),
+                    device=self.device)
                 if c_example != "":
                     # print c_example
                     words_utterance = process_turn_hyp(c_example, "en")  # cleaned text: lowercase and normalize
@@ -698,14 +706,15 @@ class NeuralBeliefTracker:
                         word = str(word)
 
                         if word not in self.w2i_dict:
-                            this_vector = self.embedding(torch.LongTensor([self.w2i_dict[self.unk_token]],device=self.device))
+                            this_vector = self.embedding(
+                                torch.LongTensor([self.w2i_dict[self.unk_token]], device=self.device))
                             print("Looping over Utterance and generating data: Generating UNK word vector for",
                                   word.encode('utf-8'))
 
                         try:
                             full_fv[
                             word_idx * self.embedding_dim: (word_idx + 1) * self.embedding_dim] = self.embedding(
-                                torch.LongTensor([self.w2i_dict[str(word)]],device=self.device))
+                                torch.LongTensor([self.w2i_dict[str(word)]], device=self.device))
                         except:
                             print("Something off with word:", word, word in self.w2i_dict)
 
@@ -800,7 +809,7 @@ class NeuralBeliefTracker:
         features_previous_state = []
 
         # feature vector of the used slot:
-        candidate_slot = self.embedding(torch.LongTensor([self.w2i_dict[str(target_slot)]],device=self.device))
+        candidate_slot = self.embedding(torch.LongTensor([self.w2i_dict[str(target_slot)]], device=self.device))
 
         # now go through all examples (positive followed by negative).
         for idx_example, example in enumerate(examples):
@@ -841,7 +850,7 @@ class NeuralBeliefTracker:
             features_confirm_values.append(utterance_fv[3])
             features_delex.append(delex_features)
 
-            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32"),device=self.device)
+            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32"), device=self.device)
 
             if target_slot != "request":
 
@@ -864,10 +873,11 @@ class NeuralBeliefTracker:
 
         for idx in range(0, positive_count):
             if target_slot != "request":
-                y_labels = torch.Tensor(np.zeros(positive_count + negative_count, dtype="float32"),device=self.device)
+                y_labels = torch.Tensor(np.zeros(positive_count + negative_count, dtype="float32"), device=self.device)
                 y_labels[idx] = labels[idx]
             else:
-                y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"),device=self.device)
+                y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"),
+                                        device=self.device)
                 y_labels[idx, :] = labels[idx]
 
         if target_slot != "request":
@@ -880,53 +890,653 @@ class NeuralBeliefTracker:
         return (features_full, features_requested_slots, features_confirm_slots, \
                 features_confirm_values, features_delex, y_labels, features_previous_state)
 
+    def test_woz(self):
+        override_en_ontology = False
+        percentage = 1.0
 
-def test_woz(self):
-    override_en_ontology = False
-    percentage = 1.0
+        woz_dialogues, _ = load_woz_data(
+            "data/" + self.dataset_name + "/" + self.dataset_name + "_test_" + self.language_suffix + ".json",
+            self.language, override_en_ontology=False)
 
-    woz_dialogues, training_turns = load_woz_data(
-        "data/" + self.dataset_name + "/" + self.dataset_name + "_test_" + self.language_suffix + ".json",
-        self.language, override_en_ontology=False)
+        print("WOZ evaluation using language:", self.language, self.language_suffix)
 
-    sessions = {}
-    saver = tf.train.Saver()
+        list_of_belief_states = []
 
-    print("WOZ evaluation using language:", self.language, self.language_suffix)
+        models = dict()
 
-    sessions = {}
-    saver = tf.train.Saver()
+        for model_id in range(0, self.num_models):
 
-    list_of_belief_states = []
+            if self.language == "english" or self.language == "en" or override_en_ontology:
+                slots_to_load = ["food", "price range", "area", "request"]
+            elif self.language == "italian" or self.language == "it":
+                slots_to_load = ["cibo", "prezzo", "area", "request"]
+            elif self.language == "german" or self.language == "de":
+                slots_to_load = ["essen", "preisklasse", "gegend", "request"]
 
-    for model_id in range(0, self.num_models):
+            for load_slot in slots_to_load:
+                path_to_load = "./models/" + self.model_type + "_" + self.language_suffix + "_" + str(
+                    override_en_ontology) + "_" + \
+                               self.dataset_name + "_" + str(load_slot) + "_" + str(self.exp_name) + "_" + str(
+                    percentage) + ".ckpt"
 
-        if self.language == "english" or self.language == "en" or override_en_ontology:
-            slots_to_load = ["food", "price range", "area", "request"]
-        elif self.language == "italian" or self.language == "it":
-            slots_to_load = ["cibo", "prezzo", "area", "request"]
-        elif self.language == "german" or self.language == "de":
-            slots_to_load = ["essen", "preisklasse", "gegend", "request"]
+                models[load_slot] = torch.load(path_to_load)
 
-        for load_slot in slots_to_load:
-            path_to_load = "./models/" + self.model_type + "_" + self.language_suffix + "_" + str(
-                override_en_ontology) + "_" + \
-                           self.dataset_name + "_" + str(load_slot) + "_" + str(self.exp_name) + "_" + str(
-                percentage) + ".ckpt"
+            evaluated_dialogues, belief_states = self.track_woz_data(woz_dialogues, self.model_variables,
+                                                                     self.word_vectors,
+                                                                     self.dialogue_ontology, models)
+            list_of_belief_states.append(belief_states)  # only useful for interpolating.
 
-            print
-            "----------- Loading Model", path_to_load, " ----------------"
+        results = self.evaluate_woz(evaluated_dialogues, self.dialogue_ontology)
 
-            sessions[load_slot] = tf.Session()
-            saver.restore(sessions[load_slot], path_to_load)
+        json.dump(evaluated_dialogues, open("results/woz_tracking.json", "w"), indent=4)
 
-        evaluated_dialogues, belief_states = track_woz_data(woz_dialogues, self.model_variables, self.word_vectors,
-                                                            self.dialogue_ontology, sessions)
-        list_of_belief_states.append(belief_states)  # only useful for interpolating.
+        print(json.dumps(results, indent=4))
+        return
 
-    results = evaluate_woz(evaluated_dialogues, self.dialogue_ontology)
+    def track_woz_data(self, dialogues, model_variables, word_vectors, dialogue_ontology, models):
+        """
+        This method evaluates the WOZ dialogues.
+        """
+        evaluated_dialogues = []
+        list_of_belief_states = []
 
-    json.dump(evaluated_dialogues, open("results/woz_tracking.json", "w"), indent=4)
+        dialogue_count = len(dialogues)
+        input("DIALOGUE COUNT: ", dialogue_count)
 
-    print(json.dumps(results, indent=4))
-    return
+        for idx in range(0, dialogue_count):
+
+            if idx % 100 == 0 and (dialogue_count == 400):  # progress for test
+                print(idx, "/", dialogue_count, "done.")
+
+            evaluated_dialogue, belief_states = self.track_dialogue_woz(model_variables, word_vectors,
+                                                                        dialogue_ontology,
+                                                                        dialogues[idx], models)
+
+            evaluated_dialogues.append(evaluated_dialogue)
+            list_of_belief_states.append(belief_states)
+
+        dialogue_count = len(evaluated_dialogues)
+        indexed_dialogues = []
+        for d_idx in range(0, dialogue_count):
+            new_dialogue = {}
+            new_dialogue["dialogue_idx"] = d_idx
+            new_dialogue["dialogue"] = evaluated_dialogues[d_idx]
+            indexed_dialogues.append(new_dialogue)
+
+        return indexed_dialogues, list_of_belief_states
+
+    def track_dialogue_woz(self, model_variables, word_vectors, dialogue_ontology, woz_dialogue, models):
+        """
+        This produces a list of belief states predicted for the given WOZ dialogue.
+        """
+
+        prev_belief_states = {}
+        belief_states = {}  # for each slot, a list of np arrays.
+
+        turn_count = len(woz_dialogue)
+        # print "Turn count:", turn_count
+
+        slots_to_track = list(set(dialogue_ontology.keys()) & set(models.keys()))
+
+        for slot in slots_to_track:
+            belief_states[slot] = {}
+            if slot != "request":
+                value_count = len(dialogue_ontology[slot]) + 1
+                prev_belief_states[slot] = np.zeros((value_count,), dtype="float32")
+
+        predictions_for_dialogue = []
+
+        # to be able to combine predictions, we must also return the belief states for each turn. So for each turn, a dictionary indexed by slot values which points to the distribution.
+        list_of_belief_states = []
+
+        # print woz_dialogue
+
+        for idx, trans_and_req_and_label_and_currlabel in enumerate(woz_dialogue):
+
+            list_of_belief_states.append({})
+
+            current_bs = {}
+
+            for slot in slots_to_track:
+
+                if type(model_variables) is dict:
+                    mx = model_variables[slot]
+                else:
+                    mx = model_variables
+
+                # print trans_and_req_and_label_and_currlabel
+
+                (transcription_and_asr, req_slot, conf_slot, conf_value, label,
+                 prev_belief_state) = trans_and_req_and_label_and_currlabel
+
+                if idx == 0 or slot == "request":
+                    # this should put empty belief state
+                    example = [(transcription_and_asr, req_slot, conf_slot, conf_value, prev_belief_state)]
+                else:
+                    # and this has the previous prediction, the one we just made in the previous iteration. We do not want to use the right one, the one used for training.
+                    example = [(transcription_and_asr, req_slot, conf_slot, conf_value, prev_bs)]
+
+                    # print example
+
+                transcription = transcription_and_asr[0]
+                asr = transcription_and_asr[1]
+
+                if slot == "request":
+
+                    updated_belief_state = self.sliding_window_over_utterance(models[slot], example, word_vectors,
+                                                                              dialogue_ontology, mx, slot,
+                                                                              print_mode=False)
+                    # updated_belief_state[updated_belief_state < 0.5] = 0
+                    list_of_belief_states[idx]["request"] = updated_belief_state
+
+                else:
+                    updated_belief_state = self.sliding_window_over_utterance(models[slot], example, word_vectors,
+                                                                              dialogue_ontology, mx, slot,
+                                                                              print_mode=False)
+                    # updated_belief_state = softmax(updated_belief_state)
+                    # updated_belief_state = update_belief_state(prev_belief_states[slot], new_belief_state)
+                    prev_belief_states[slot] = updated_belief_state
+                    list_of_belief_states[idx][slot] = updated_belief_state
+
+                for idx_value, value in enumerate(dialogue_ontology[slot]):
+                    if slot in "request":
+                        current_bs[slot] = self.print_belief_state_woz_requestables(dialogue_ontology[slot],
+                                                                                    updated_belief_state, threshold=0.5)
+                    else:
+                        current_bs[slot] = self.print_belief_state_woz_informable(dialogue_ontology[slot],
+                                                                                  updated_belief_state,
+                                                                                  threshold=0.01)  # swap to 0.001 Nikola
+                        #   print idx, slot, current_bs[slot], current_bs
+
+            prev_bs = deepcopy(current_bs)
+
+            trans_plus_sys = "User: " + transcription
+            # + req_slot, conf_slot, conf_value
+            if req_slot[0] != "":
+                trans_plus_sys += "    System Request: " + str(req_slot)
+
+            if conf_slot[0] != "":
+                trans_plus_sys += "    System Confirm: " + str(conf_slot) + " " + str(conf_value)
+
+            trans_plus_sys += "   ASR: " + str(asr)
+
+            predictions_for_dialogue.append((trans_plus_sys, {"True State": label}, {"Prediction": current_bs}))
+
+        return predictions_for_dialogue, list_of_belief_states
+
+    def evaluate_woz(self, evaluated_dialogues, dialogue_ontology):
+        """
+        Given a list of (transcription, correct labels, predicted labels), this measures joint goal (as in Matt's paper),
+        and f-scores, as presented in Shawn's NIPS paper.
+
+        Assumes request is always there in the ontology.
+        """
+        print_mode = True
+        informable_slots = list(
+            set(["food", "area", "price range", "prezzo", "cibo", "essen", "preisklasse", "gegend"]) & set(
+                dialogue_ontology.keys()))
+        dialogue_count = len(evaluated_dialogues)
+        if "request" in dialogue_ontology:
+            req_slots = [str("req_" + x) for x in dialogue_ontology["request"]]
+            requestables = ["request"]
+        else:
+            req_slots = []
+            requestables = []
+        # print req_slots
+
+        true_positives = {}
+        false_negatives = {}
+        false_positives = {}
+
+        req_match = 0.0
+        req_full_turn_count = 0.0
+
+        req_acc_total = 0.0  # number of turns which express requestables
+        req_acc_correct = 0.0
+
+        for slot in dialogue_ontology:
+            true_positives[slot] = 0
+            false_positives[slot] = 0
+            false_negatives[slot] = 0
+
+        for value in requestables + req_slots + ["request"]:
+            true_positives[value] = 0
+            false_positives[value] = 0
+            false_negatives[value] = 0
+
+        correct_turns = 0  # when there is at least one informable, do all of them match?
+        incorrect_turns = 0  # when there is at least one informable, if any are different.
+
+        slot_correct_turns = {}
+        slot_incorrect_turns = {}
+
+        for slot in informable_slots:
+            slot_correct_turns[slot] = 0.0
+            slot_incorrect_turns[slot] = 0.0
+
+        dialogue_joint_metrics = []
+        dialogue_req_metrics = []
+
+        dialogue_slot_metrics = {}
+
+        for slot in informable_slots:
+            dialogue_slot_metrics[slot] = []
+
+        for idx in range(0, dialogue_count):
+
+            dialogue = evaluated_dialogues[idx]["dialogue"]
+            # print dialogue
+
+            curr_dialogue_goal_joint_total = 0.0  # how many turns have informables
+            curr_dialogue_goal_joint_correct = 0.0
+
+            curr_dialogue_goal_slot_total = {}  # how many turns in current dialogue have specific informables
+            curr_dialogue_goal_slot_correct = {}  # and how many of these are correct
+
+            for slot in informable_slots:
+                curr_dialogue_goal_slot_total[slot] = 0.0
+                curr_dialogue_goal_slot_correct[slot] = 0.0
+
+            creq_tp = 0.0
+            creq_fn = 0.0
+            creq_fp = 0.0
+            # to compute per-dialogue f-score for requestables
+
+            for turn in dialogue:
+
+                # first update full requestable
+
+                req_full_turn_count += 1.0
+
+                if requestables:
+
+                    if compare_request_lists(turn[1]["True State"]["request"], turn[2]["Prediction"]["request"]):
+                        req_match += 1.0
+
+                    if len(turn[1]["True State"]["request"]) > 0:
+                        req_acc_total += 1.0
+
+                        if compare_request_lists(turn[1]["True State"]["request"], turn[2]["Prediction"]["request"]):
+                            req_acc_correct += 1.0
+
+                # per dialogue requestable metrics
+                if requestables:
+
+                    true_requestables = turn[1]["True State"]["request"]
+                    predicted_requestables = turn[2]["Prediction"]["request"]
+
+                    for each_true_req in true_requestables:
+                        if each_true_req in dialogue_ontology["request"] and each_true_req in predicted_requestables:
+                            true_positives["request"] += 1
+                            creq_tp += 1.0
+                            true_positives["req_" + each_true_req] += 1
+                        elif each_true_req in dialogue_ontology["request"]:
+                            false_negatives["request"] += 1
+                            false_negatives["req_" + each_true_req] += 1
+                            creq_fn += 1.0
+                            # print "FN:", turn[0], "---", true_requestables, "----", predicted_requestables
+
+                    for each_predicted_req in predicted_requestables:
+                        # ignore matches, already counted, now need just negatives:
+                        if each_predicted_req not in true_requestables:
+                            false_positives["request"] += 1
+                            false_positives["req_" + each_predicted_req] += 1
+                            creq_fp += 1.0
+                            # print "-- FP:", turn[0], "---", true_requestables, "----", predicted_requestables
+
+                # print turn
+                inf_present = {}
+                inf_correct = {}
+
+                for slot in informable_slots:
+                    inf_present[slot] = False
+                    inf_correct[slot] = True
+
+                informable_present = False
+                informable_correct = True
+
+                for slot in informable_slots:
+
+                    try:
+                        true_value = turn[1]["True State"][slot]
+                        predicted_value = turn[2]["Prediction"][slot]
+                    except:
+
+                        print
+                        "PROBLEM WITH", turn, "slot:", slot, "inf slots", informable_slots
+
+                    if true_value != "none":
+                        informable_present = True
+                        inf_present[slot] = True
+
+                    if true_value == predicted_value:  # either match or none, so not incorrect
+                        if true_value != "none":
+                            true_positives[slot] += 1
+                    else:
+                        if true_value == "none":
+                            false_positives[slot] += 1
+                        elif predicted_value == "none":
+                            false_negatives[slot] += 1
+                        else:
+                            # spoke to Shawn - he does this as false negatives for now - need to think about how we evaluate it properly.
+                            false_negatives[slot] += 1
+
+                        informable_correct = False
+                        inf_correct[slot] = False
+
+                if informable_present:
+
+                    curr_dialogue_goal_joint_total += 1.0
+
+                    if informable_correct:
+                        correct_turns += 1
+                        curr_dialogue_goal_joint_correct += 1.0
+                    else:
+                        incorrect_turns += 1
+
+                for slot in informable_slots:
+                    if inf_present[slot]:
+                        curr_dialogue_goal_slot_total[slot] += 1.0
+
+                        if inf_correct[slot]:
+                            slot_correct_turns[slot] += 1.0
+                            curr_dialogue_goal_slot_correct[slot] += 1.0
+                        else:
+                            slot_incorrect_turns[slot] += 1.0
+
+            # current dialogue requestables
+
+            if creq_tp + creq_fp > 0.0:
+                creq_precision = creq_tp / (creq_tp + creq_fp)
+            else:
+                creq_precision = 0.0
+
+            if creq_tp + creq_fn > 0.0:
+                creq_recall = creq_tp / (creq_tp + creq_fn)
+            else:
+                creq_recall = 0.0
+
+            if creq_precision + creq_recall == 0:
+                if creq_tp == 0 and creq_fn == 0 and creq_fn == 0:
+                    # no requestables expressed, special value
+                    creq_fscore = -1.0
+                else:
+                    creq_fscore = 0.0  # none correct but some exist
+            else:
+                creq_fscore = (2 * creq_precision * creq_recall) / (creq_precision + creq_recall)
+
+            dialogue_req_metrics.append(creq_fscore)
+
+            # and current dialogue informables:
+
+            for slot in informable_slots:
+                if curr_dialogue_goal_slot_total[slot] > 0:
+                    dialogue_slot_metrics[slot].append(
+                        float(curr_dialogue_goal_slot_correct[slot]) / curr_dialogue_goal_slot_total[slot])
+                else:
+                    dialogue_slot_metrics[slot].append(-1.0)
+
+            if informable_slots:
+                if curr_dialogue_goal_joint_total > 0:
+                    current_dialogue_joint_metric = float(
+                        curr_dialogue_goal_joint_correct) / curr_dialogue_goal_joint_total
+                    dialogue_joint_metrics.append(current_dialogue_joint_metric)
+                else:
+                    # should not ever happen when all slots are used, but for validation we might not have i.e. area mentioned
+                    dialogue_joint_metrics.append(-1.0)
+
+        if informable_slots:
+            goal_joint_total = float(correct_turns) / float(correct_turns + incorrect_turns)
+
+        slot_gj = {}
+
+        total_true_positives = 0
+        total_false_negatives = 0
+        total_false_positives = 0
+
+        precision = {}
+        recall = {}
+        fscore = {}
+
+        # FSCORE for each requestable slot:
+        if requestables:
+            add_req = ["request"] + req_slots
+        else:
+            add_req = []
+
+        for slot in informable_slots + add_req:
+
+            if slot not in ["request"] and slot not in req_slots:
+                total_true_positives += true_positives[slot]
+                total_false_positives += false_positives[slot]
+                total_false_negatives += false_negatives[slot]
+
+            precision_denominator = (true_positives[slot] + false_positives[slot])
+
+            if precision_denominator != 0:
+                precision[slot] = float(true_positives[slot]) / precision_denominator
+            else:
+                precision[slot] = 0
+
+            recall_denominator = (true_positives[slot] + false_negatives[slot])
+
+            if recall_denominator != 0:
+                recall[slot] = float(true_positives[slot]) / recall_denominator
+            else:
+                recall[slot] = 0
+
+            if precision[slot] + recall[slot] != 0:
+                fscore[slot] = (2 * precision[slot] * recall[slot]) / (precision[slot] + recall[slot])
+                print
+                "REQ - slot", slot, round(precision[slot], 3), round(recall[slot], 3), round(fscore[slot], 3)
+            else:
+                fscore[slot] = 0
+
+            total_count_curr = true_positives[slot] + false_negatives[slot] + false_positives[slot]
+
+            # if "req" in slot:
+            # if slot in ["area", "food", "price range", "request"]:
+            # print "Slot:", slot, "Count:", total_count_curr, true_positives[slot], false_positives[slot], false_negatives[slot], "[Precision, Recall, Fscore]=", round(precision[slot], 2), round(recall[slot], 2), round(fscore[slot], 2)
+            # print "Slot:", slot, "TP:", true_positives[slot], "FN:", false_negatives[slot], "FP:", false_positives[slot]
+
+        if requestables:
+
+            requested_accuracy_all = req_match / req_full_turn_count
+
+            if req_acc_total != 0:
+                requested_accuracy_exist = req_acc_correct / req_acc_total
+            else:
+                requested_accuracy_exist = 1.0
+
+            slot_gj["request"] = round(requested_accuracy_exist, 3)
+            # slot_gj["requestf"] = round(fscore["request"], 3)
+
+        for slot in informable_slots:
+            slot_gj[slot] = round(
+                float(slot_correct_turns[slot]) / float(slot_correct_turns[slot] + slot_incorrect_turns[slot]), 3)
+
+        # NIKOLA TODO: will be useful for goal joint
+        if len(informable_slots) == 3:
+            # print "\n\nGoal Joint: " + str(round(goal_joint_total, 3)) + "\n"
+            slot_gj["joint"] = round(goal_joint_total, 3)
+
+        return slot_gj
+
+    def print_belief_state_woz_informable(self, curr_values, distribution, threshold):
+        """
+        Returns the top one if it is above threshold.
+        """
+        max_value = "none"
+        max_score = 0.0
+        total_value = 0.0
+
+        for idx, value in enumerate(curr_values):
+
+            total_value += distribution[idx]
+
+            if distribution[idx] >= threshold:
+
+                if distribution[idx] >= max_score:
+                    max_value = value
+                    max_score = distribution[idx]
+
+        if max_score >= (1.0 - total_value):
+            return max_value
+        else:
+            return "none"
+
+    def print_belief_state_woz_requestables(self, curr_values, distribution, threshold):
+        """
+        Returns the top one if it is above threshold.
+        """
+        requested_slots = []
+
+        # now we just print to JSON file:
+        for idx, value in enumerate(curr_values):
+
+            if distribution[idx] >= threshold:
+                requested_slots.append(value)
+
+        return requested_slots
+
+    def print_slot_predictions(self, distribution, slot_values, target_slot, threshold=0.05):
+        """
+        Prints all the activated slot values for the provided predictions
+        """
+
+        predicted_values = []
+        for idx, value in enumerate(slot_values):
+            if distribution[idx] >= threshold:
+                predicted_values += ((value, round(distribution[idx], 2)))  # , round(post_sf[idx], 2) ))
+
+        print
+        "Predictions for", str(target_slot + ":"), predicted_values
+
+        return predicted_values
+
+    def return_slot_predictions(self, distribution, slot_values, target_slot, threshold=0.05):
+        """
+        Prints all the activated slot values for the provided predictions
+        """
+        predicted_values = []
+        for idx, value in enumerate(slot_values):
+            if distribution[idx] >= threshold:
+                predicted_values += ((value, round(distribution[idx], 2)))  # , round(post_sf[idx], 2) ))
+
+        return predicted_values
+
+    def sliding_window_over_utterance(self, model, utterance, word_vectors, dialogue_ontology, model_variables,
+                                      target_slot,
+                                      print_mode=True):
+        """
+        """
+
+        if type(model_variables) is dict:
+            model_variables = model_variables[target_slot]
+
+        list_of_outputs = self.test_utterance(model, utterance, word_vectors, dialogue_ontology, model_variables,
+                                              target_slot,
+                                              print_mode)
+        belief_state = list_of_outputs[0]
+
+        return belief_state
+
+    def test_utterance(self, model, utterances, word_vectors, dialogue_ontology, model_variables, target_slot,
+                       do_print=True):
+        """
+        Returns a list of belief states, to be weighted later.
+        """
+
+        potential_values = dialogue_ontology[target_slot]
+
+        if target_slot == "request":
+            value_count = len(potential_values)
+        else:
+            value_count = len(potential_values) + 1
+
+        # should be a list of features for each ngram supplied.
+        fv_tuples = self.extract_feature_vectors(utterances, word_vectors, use_asr=True)
+        utterance_count = len(utterances)
+
+        belief_state = np.zeros((value_count,), dtype="float32")
+
+        # accumulators
+        slot_values = []
+        candidate_values = []
+        delexicalised_features = []
+        fv_full = []
+        fv_sys_req = []
+        fv_conf_slot = []
+        fv_conf_val = []
+        features_previous_state = []
+
+        for idx_hyp, extracted_fv in enumerate(fv_tuples):
+
+            current_utterance = utterances[idx_hyp][0][0]
+
+            prev_belief_state = utterances[idx_hyp][4]
+
+            prev_belief_state_vector = np.zeros((value_count,), dtype="float32")
+
+            if target_slot != "request":
+
+                prev_value = prev_belief_state[target_slot]
+
+                if prev_value == "none" or prev_value not in dialogue_ontology[target_slot]:
+                    prev_belief_state_vector[value_count - 1] = 1
+                else:
+                    prev_belief_state_vector[dialogue_ontology[target_slot].index(prev_value)] = 1
+
+            features_previous_state.append(prev_belief_state_vector)
+
+            (full_utt, sys_req, conf_slot, conf_value) = extracted_fv
+
+            delex_vector = delexicalise_utterance_values(current_utterance, target_slot, dialogue_ontology[target_slot])
+
+            fv_full.append(full_utt)
+            delexicalised_features.append(delex_vector)
+            fv_sys_req.append(sys_req)
+            fv_conf_slot.append(conf_slot)
+            fv_conf_val.append(conf_value)
+
+        slot_values = np.array(slot_values)
+        candidate_values = np.array(candidate_values)
+        delexicalised_features = np.array(
+            delexicalised_features)  # will be [batch_size, label_size, longest_utterance_length, vector_dimension]
+
+        fv_sys_req = np.array(fv_sys_req)
+        fv_conf_slot = np.array(fv_conf_slot)
+        fv_conf_val = np.array(fv_conf_val)
+        fv_full = np.array(fv_full)
+        features_previous_state = np.array(features_previous_state)
+
+        keep_prob, x_full, x_delex, \
+        requested_slots, system_act_confirm_slots, system_act_confirm_values, y_, y_past_state, accuracy, \
+        f_score, precision, recall, num_true_positives, \
+        num_positives, classified_positives, y, predictions, true_predictions, correct_prediction, \
+        true_positives, train_step, update_coefficient = model_variables
+
+        distribution, update_coefficient_load = sess.run([y, update_coefficient],
+                                                         feed_dict={x_full: fv_full, x_delex: delexicalised_features, \
+                                                                    requested_slots: fv_sys_req, \
+                                                                    system_act_confirm_slots: fv_conf_slot,
+                                                                    y_past_state: features_previous_state,
+                                                                    system_act_confirm_values: fv_conf_val, \
+                                                                    keep_prob: 1.0})
+
+        belief_state = distribution[:, 0]
+
+        current_start_idx = 0
+        list_of_belief_states = []
+
+        for idx in range(0, utterance_count):
+            current_distribution = distribution[idx, :]
+            list_of_belief_states.append(current_distribution)
+
+        if do_print:
+            print_slot_predictions(list_of_belief_states[0], potential_values, target_slot, threshold=0.1)
+
+        if len(list_of_belief_states) == 1:
+            return [list_of_belief_states[0]]
+
+        return list_of_belief_states

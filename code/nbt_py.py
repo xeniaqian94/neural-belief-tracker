@@ -334,38 +334,6 @@ def evaluate_woz(evaluated_dialogues, dialogue_ontology):
     return slot_gj
 
 
-def track_woz_data(dialogues, model_variables, word_vectors, dialogue_ontology, sessions):
-    """
-    This method evaluates the WOZ dialogues. 
-    """
-    evaluated_dialogues = []
-    list_of_belief_states = []
-
-    dialogue_count = len(dialogues)
-    # print "DIALOGUE COUNT: ", dialogue_count
-
-    for idx in range(0, dialogue_count):
-
-        if idx % 100 == 0 and (dialogue_count == 400):  # progress for test
-            print
-            idx, "/", dialogue_count, "done."
-
-        evaluated_dialogue, belief_states = track_dialogue_woz(model_variables, word_vectors, dialogue_ontology,
-                                                               dialogues[idx], sessions)
-        evaluated_dialogues.append(evaluated_dialogue)
-        list_of_belief_states.append(belief_states)
-
-    dialogue_count = len(evaluated_dialogues)
-    indexed_dialogues = []
-    for d_idx in range(0, dialogue_count):
-        new_dialogue = {}
-        new_dialogue["dialogue_idx"] = d_idx
-        new_dialogue["dialogue"] = evaluated_dialogues[d_idx]
-        indexed_dialogues.append(new_dialogue)
-
-    return indexed_dialogues, list_of_belief_states
-
-
 def track_dialogue_woz(model_variables, word_vectors, dialogue_ontology, woz_dialogue, sessions):
     """
     This produces a list of belief states predicted for the given WOZ dialogue. 
@@ -624,105 +592,105 @@ def sliding_window_over_utterance(sess, utterance, word_vectors, dialogue_ontolo
     return belief_state
 
 
-# def test_utterance(sess, utterances, word_vectors, dialogue_ontology, model_variables, target_slot, do_print=True):
-#     """
-#     Returns a list of belief states, to be weighted later.
-#     """
-#
-#     potential_values = dialogue_ontology[target_slot]
-#
-#     if target_slot == "request":
-#         value_count = len(potential_values)
-#     else:
-#         value_count = len(potential_values) + 1
-#
-#     # should be a list of features for each ngram supplied.
-#     fv_tuples = extract_feature_vectors(utterances, word_vectors, use_asr=True)
-#     utterance_count = len(utterances)
-#
-#     belief_state = numpy.zeros((value_count,), dtype="float32")
-#
-#     # accumulators
-#     slot_values = []
-#     candidate_values = []
-#     delexicalised_features = []
-#     fv_full = []
-#     fv_sys_req = []
-#     fv_conf_slot = []
-#     fv_conf_val = []
-#     features_previous_state = []
-#
-#     for idx_hyp, extracted_fv in enumerate(fv_tuples):
-#
-#         current_utterance = utterances[idx_hyp][0][0]
-#
-#         prev_belief_state = utterances[idx_hyp][4]
-#
-#         prev_belief_state_vector = numpy.zeros((value_count,), dtype="float32")
-#
-#         if target_slot != "request":
-#
-#             prev_value = prev_belief_state[target_slot]
-#
-#             if prev_value == "none" or prev_value not in dialogue_ontology[target_slot]:
-#                 prev_belief_state_vector[value_count - 1] = 1
-#             else:
-#                 prev_belief_state_vector[dialogue_ontology[target_slot].index(prev_value)] = 1
-#
-#         features_previous_state.append(prev_belief_state_vector)
-#
-#         (full_utt, sys_req, conf_slot, conf_value) = extracted_fv
-#
-#         delex_vector = delexicalise_utterance_values(current_utterance, target_slot, dialogue_ontology[target_slot])
-#
-#         fv_full.append(full_utt)
-#         delexicalised_features.append(delex_vector)
-#         fv_sys_req.append(sys_req)
-#         fv_conf_slot.append(conf_slot)
-#         fv_conf_val.append(conf_value)
-#
-#     slot_values = numpy.array(slot_values)
-#     candidate_values = numpy.array(candidate_values)
-#     delexicalised_features = numpy.array(
-#         delexicalised_features)  # will be [batch_size, label_size, longest_utterance_length, vector_dimension]
-#
-#     fv_sys_req = numpy.array(fv_sys_req)
-#     fv_conf_slot = numpy.array(fv_conf_slot)
-#     fv_conf_val = numpy.array(fv_conf_val)
-#     fv_full = numpy.array(fv_full)
-#     features_previous_state = numpy.array(features_previous_state)
-#
-#     keep_prob, x_full, x_delex, \
-#     requested_slots, system_act_confirm_slots, system_act_confirm_values, y_, y_past_state, accuracy, \
-#     f_score, precision, recall, num_true_positives, \
-#     num_positives, classified_positives, y, predictions, true_predictions, correct_prediction, \
-#     true_positives, train_step, update_coefficient = model_variables
-#
-#     distribution, update_coefficient_load = sess.run([y, update_coefficient],
-#                                                      feed_dict={x_full: fv_full, x_delex: delexicalised_features, \
-#                                                                 requested_slots: fv_sys_req, \
-#                                                                 system_act_confirm_slots: fv_conf_slot,
-#                                                                 y_past_state: features_previous_state,
-#                                                                 system_act_confirm_values: fv_conf_val, \
-#                                                                 keep_prob: 1.0})
-#
-#     belief_state = distribution[:, 0]
-#
-#     current_start_idx = 0
-#     list_of_belief_states = []
-#
-#     for idx in range(0, utterance_count):
-#         current_distribution = distribution[idx, :]
-#         list_of_belief_states.append(current_distribution)
-#
-#     if do_print:
-#         print_slot_predictions(list_of_belief_states[0], potential_values, target_slot, threshold=0.1)
-#
-#     if len(list_of_belief_states) == 1:
-#         return [list_of_belief_states[0]]
-#
-#     return list_of_belief_states
-#
+def test_utterance(sess, utterances, word_vectors, dialogue_ontology, model_variables, target_slot, do_print=True):
+    """
+    Returns a list of belief states, to be weighted later.
+    """
+
+    potential_values = dialogue_ontology[target_slot]
+
+    if target_slot == "request":
+        value_count = len(potential_values)
+    else:
+        value_count = len(potential_values) + 1
+
+    # should be a list of features for each ngram supplied.
+    fv_tuples = extract_feature_vectors(utterances, word_vectors, use_asr=True)
+    utterance_count = len(utterances)
+
+    belief_state = numpy.zeros((value_count,), dtype="float32")
+
+    # accumulators
+    slot_values = []
+    candidate_values = []
+    delexicalised_features = []
+    fv_full = []
+    fv_sys_req = []
+    fv_conf_slot = []
+    fv_conf_val = []
+    features_previous_state = []
+
+    for idx_hyp, extracted_fv in enumerate(fv_tuples):
+
+        current_utterance = utterances[idx_hyp][0][0]
+
+        prev_belief_state = utterances[idx_hyp][4]
+
+        prev_belief_state_vector = numpy.zeros((value_count,), dtype="float32")
+
+        if target_slot != "request":
+
+            prev_value = prev_belief_state[target_slot]
+
+            if prev_value == "none" or prev_value not in dialogue_ontology[target_slot]:
+                prev_belief_state_vector[value_count - 1] = 1
+            else:
+                prev_belief_state_vector[dialogue_ontology[target_slot].index(prev_value)] = 1
+
+        features_previous_state.append(prev_belief_state_vector)
+
+        (full_utt, sys_req, conf_slot, conf_value) = extracted_fv
+
+        delex_vector = delexicalise_utterance_values(current_utterance, target_slot, dialogue_ontology[target_slot])
+
+        fv_full.append(full_utt)
+        delexicalised_features.append(delex_vector)
+        fv_sys_req.append(sys_req)
+        fv_conf_slot.append(conf_slot)
+        fv_conf_val.append(conf_value)
+
+    slot_values = numpy.array(slot_values)
+    candidate_values = numpy.array(candidate_values)
+    delexicalised_features = numpy.array(
+        delexicalised_features)  # will be [batch_size, label_size, longest_utterance_length, vector_dimension]
+
+    fv_sys_req = numpy.array(fv_sys_req)
+    fv_conf_slot = numpy.array(fv_conf_slot)
+    fv_conf_val = numpy.array(fv_conf_val)
+    fv_full = numpy.array(fv_full)
+    features_previous_state = numpy.array(features_previous_state)
+
+    keep_prob, x_full, x_delex, \
+    requested_slots, system_act_confirm_slots, system_act_confirm_values, y_, y_past_state, accuracy, \
+    f_score, precision, recall, num_true_positives, \
+    num_positives, classified_positives, y, predictions, true_predictions, correct_prediction, \
+    true_positives, train_step, update_coefficient = model_variables
+
+    distribution, update_coefficient_load = sess.run([y, update_coefficient],
+                                                     feed_dict={x_full: fv_full, x_delex: delexicalised_features, \
+                                                                requested_slots: fv_sys_req, \
+                                                                system_act_confirm_slots: fv_conf_slot,
+                                                                y_past_state: features_previous_state,
+                                                                system_act_confirm_values: fv_conf_val, \
+                                                                keep_prob: 1.0})
+
+    belief_state = distribution[:, 0]
+
+    current_start_idx = 0
+    list_of_belief_states = []
+
+    for idx in range(0, utterance_count):
+        current_distribution = distribution[idx, :]
+        list_of_belief_states.append(current_distribution)
+
+    if do_print:
+        print_slot_predictions(list_of_belief_states[0], potential_values, target_slot, threshold=0.1)
+
+    if len(list_of_belief_states) == 1:
+        return [list_of_belief_states[0]]
+
+    return list_of_belief_states
+
 
 
 def main():
