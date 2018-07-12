@@ -486,8 +486,8 @@ class NeuralBeliefTracker:
         """
         for slot in self.dialogue_ontology.keys():
 
-            if slot == "request":
-                continue
+            # if slot == "request":
+            #     continue
             print("\n==============  Training the NBT Model for slot", slot, "===============\n")
             stime = time.time()
             self.train_run(target_language=self.language, dataset_name=self.dataset_name,
