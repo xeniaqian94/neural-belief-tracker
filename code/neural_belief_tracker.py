@@ -147,6 +147,7 @@ class NeuralBeliefTracker:
                 # accounting for all slot values and two special values, dontcare and NONE).
                 # "Find me food in south part of the city"
                 dialogue_ontology[slot].append(dontcare_value)
+                # input("appended dontcare value into slot " + str(slot) + " " + str(len(dialogue_ontology[slot])))
             for value in dialogue_ontology[slot]:
                 value = str(value)
                 if u" " not in value and value not in word_vectors:
@@ -225,7 +226,8 @@ class NeuralBeliefTracker:
                                                        value_list=dialogue_ontology[slot], drop_out=self.drop_out)
             else:
                 slot_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))
-                value_ids = torch.LongTensor(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))
+                value_ids = torch.LongTensor(
+                    np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"))  # this includes None
 
                 for value_idx, value in enumerate(dialogue_ontology[slot]):
                     slot_ids[value_idx] = self.w2i_dict[slot]
@@ -352,14 +354,6 @@ class NeuralBeliefTracker:
         if val_data is None:
             print("val data is none")
 
-        # will be used to save model parameters with best validation scores.
-
-        # saver = tf.train.Saver()
-        #
-        # init = tf.global_variables_initializer()
-        # sess = tf.Session()
-        # sess.run(init)
-
         print_mode = False
 
         # Model training:
@@ -389,8 +383,8 @@ class NeuralBeliefTracker:
             current_epoch_fscore = 0.0
             current_epoch_acc = 0.0
 
-            if epoch > 1 and target_slot == "request":
-                return None
+            # if epoch > 1 and target_slot == "request":
+            #     return None
 
             for batch_ind, batch_id in enumerate(range(batches_per_epoch)):
                 random_positive_count = ratio[target_slot]  # number of randomly drawn negative example
@@ -413,12 +407,8 @@ class NeuralBeliefTracker:
                 if target_slot == "request":
                     loss = self.MSELoss(batch_ys_pred, batch_ys)
                 else:
-                    print(batch_ys)
-                    print(batch_ys.shape)
-                    print(batch_ys_pred.shape)
-                    input("size correct?")
-                    for i in range(batch_ys.shape[1]):
-                        loss = self.CELoss(batch_ys_pred, batch_ys)  # TODO check index as label
+                    loss = self.CELoss(batch_ys_pred, batch_ys.long())  # TODO check index as label
+
                 print("minibatch ", batch_ind, "loss", loss)
                 loss.backward()
                 optimizer.step()
@@ -447,12 +437,10 @@ class NeuralBeliefTracker:
             # param to check (data, dialogue_ontology, \
             #                        positive_examples, negative_examples, print_mode=False, epoch_id=""):
 
-
-
             # val_batch_ys_pred=self.model_variables[target_slot](val_data)
 
             stime = time.time()
-            current_metric=self.model_variables[target_slot].eval_model(val_data)
+            current_metric = self.model_variables[target_slot].eval_model(val_data)
 
             # current_f_score = self.model_variables[target_slot].evaluate_model(val_data,
             #                                                                    dialogue_ontology,
@@ -481,14 +469,14 @@ class NeuralBeliefTracker:
 
                 print("\n ====================== New best validation metric:", round(current_metric, 4), \
                       " - saving these parameters. Epoch is:", epoch + 1, "/", max_epoch,
-                      "---------------- ===========  \n")
+                      "----------------===========  \n")
 
                 best_f_score = current_metric
                 path_to_save = "./models/" + model_type + "_" + language + "_" + str(override_en_ontology) + "_" + \
                                str(dataset_name) + "_" + str(target_slot) + "_" + str(exp_name) + "_" + str(
                     percentage) + ".ckpt"
 
-                torch.save(path_to_save, self.model_variables[target_slot])
+                # torch.save(path_to_save, self.model_variables[target_slot])
 
         print("The best parameters achieved over all epochs, at validation metric of", round(best_f_score, 4))
 
@@ -497,6 +485,9 @@ class NeuralBeliefTracker:
         FUTURE: Train the NBT model with new dataset, slot by slot.
         """
         for slot in self.dialogue_ontology.keys():
+
+            if slot == "request":
+                continue
             print("\n==============  Training the NBT Model for slot", slot, "===============\n")
             stime = time.time()
             self.train_run(target_language=self.language, dataset_name=self.dataset_name,
@@ -758,6 +749,7 @@ class NeuralBeliefTracker:
 
         if target_slot != "request":
             label_count = len(self.dialogue_ontology[target_slot]) + 1  # NONE
+            print("target_slot label_count is " + str(label_count))
         else:
             label_count = len(self.dialogue_ontology[target_slot])
 
@@ -870,16 +862,18 @@ class NeuralBeliefTracker:
         features_delex = torch.stack(features_delex)
         features_previous_state = torch.stack(features_previous_state)
 
-        y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"))
         for idx in range(0, positive_count):
             if target_slot != "request":
-                y_labels[idx, labels[idx]] = 1
+                y_labels = torch.Tensor(np.zeros((positive_count + negative_count), dtype="float32"))
+                y_labels[idx] = labels[idx]
             else:
+                y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"))
                 y_labels[idx, :] = labels[idx]
 
         if target_slot != "request":
-            y_labels[positive_count:,
-            label_count - 1] = 1  # NONE, 0-indexing, starting from index positive_count, all are negative cases
+            y_labels[
+            positive_count:] = label_count - 1  # NONE, 0-indexing, starting from index positive_count, all are negative cases
+            # input(label_count-1)
 
         # if target_slot == "request" then all zero?
 

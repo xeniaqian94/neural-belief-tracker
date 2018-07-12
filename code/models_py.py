@@ -30,7 +30,7 @@ class NBT_model(nn.Module):
         self.hidden_utterance_size = self.num_filters  # * len(filter_sizes)
         self.vector_dimension = vector_dimension
         self.longest_utterance_length = longest_utterance_length
-        self.use_softmax = use_softmax and target_slot == 'request'
+        self.use_softmax = use_softmax and target_slot != 'request'
         assert (use_softmax ^ (
                 target_slot == "request"))  # if request, choose 1 of the 7; if not, has the option of value=None
 
@@ -107,8 +107,6 @@ class NBT_model(nn.Module):
         # TODO 1 after dragon-boat: change CNN filtering -> h_utterance_represetnation code logic in PyTorch
         final_utterance_representation = self.define_CNN_model(utterance_representations_full)
 
-        # print("is this utterance shape = (minibatch_size, vector_dim) ? " + str(final_utterance_representation.shape))
-
         # Next, multiply candidates [label_size, vector_dimension] each with the uttereance representations [None, vector_dimension], to get [None, label_size, vector_dimension]
         # or utterance [None, vector_dimension] X [vector_dimension, label_size] to get [None, label_size]
         # h_utterance_representation_candidate_interaction = tf.Variable(tf.zeros([None, label_size, vector_dimension]))
@@ -163,16 +161,18 @@ class NBT_model(nn.Module):
 
         # TODO: 1. modify loss into for-looping multiple label; 2. making sense of the y_combine interpolation
 
-        if self.use_softmax:
-            append_zeros_none = torch.Tensor(np.zeros([y_presoftmax_1.shape[0], 1, y_presoftmax_1.shape[2]]))
-            y_presoftmax = torch.cat((y_presoftmax, append_zeros_none), dim=1)
+        # if self.use_softmax:
+        #     append_zeros_none = torch.Tensor(np.zeros([y_presoftmax_1.shape[0], 1, y_presoftmax_1.shape[2]]))
+        #     y_presoftmax = torch.cat((y_presoftmax, append_zeros_none), dim=1)
 
         if self.use_delex_features:
             y_presoftmax = y_presoftmax + utterance_representation_delex
 
         if self.use_softmax:
-            # input(y_past_state.shape, "Tensor of size (mini_batch_size,label_count)?")
-            y_combine = self.combine_coefficient * y_presoftmax + (1 - self.combine_coefficient) * y_past_state
+            # print("Tensor of size (mini_batch_size,label_count)?")
+            # input(y_past_state.shape)
+            # input(y_presoftmax.shape)
+            y = self.combine_coefficient * y_presoftmax.squeeze(2) + (1 - self.combine_coefficient) * y_past_state
             # y = F.softmax(y_combine, dim=1)
             print("predicting non-request prior-softmax, loss is CrossEntropy")
 
@@ -180,7 +180,7 @@ class NBT_model(nn.Module):
             y = F.sigmoid(y_presoftmax)  # comparative max is okay?
             print("predicting request with sigmoid, loss is L2-MSE")
 
-        y = y.squeeze(2)
+        # y = y.squeeze(2)
 
         return y
 
@@ -197,8 +197,10 @@ class NBT_model(nn.Module):
             predictions = f_pred.round()
 
         # input(predictions)
-        true_predictions = val_ys
+        true_predictions = val_ys.float()
+        predictions=predictions.float()
         # input(true_predictions)
+
         correct_prediction = (predictions == true_predictions).float()
 
         # input(correct_prediction)
@@ -215,4 +217,4 @@ class NBT_model(nn.Module):
         precision = num_true_positives / classified_positives
         f_score = (2 * recall * precision) / (recall + precision)
 
-        return accuracy
+        return np.asscalar(accuracy.data.numpy())
