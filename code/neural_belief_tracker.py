@@ -480,7 +480,10 @@ class NeuralBeliefTracker:
                                str(dataset_name) + "_" + str(target_slot) + "_" + str(exp_name) + "_" + str(
                     percentage) + ".ckpt"
 
-                torch.save(open(path_to_save, "wb"), self.model_variables[target_slot])
+                torch.save(self.model_variables[target_slot].state_dict(), path_to_save)
+
+                # reference: torch.save(net.state_dict(), './net.pth')
+                # net.load_state_dict(torch.load('./net.pth'))
 
         print("The best parameters achieved over all epochs, at validation metric of", round(best_f_score, 4))
 
@@ -919,7 +922,8 @@ class NeuralBeliefTracker:
                                self.dataset_name + "_" + str(load_slot) + "_" + str(self.exp_name) + "_" + str(
                     percentage) + ".ckpt"
 
-                models[load_slot] = torch.load(path_to_load)
+                models[load_slot] = self.model_variables[load_slot]
+                models[load_slot].load_state_dict(torch.load(path_to_load))
 
             evaluated_dialogues, belief_states = self.track_woz_data(woz_dialogues, self.model_variables,
                                                                      self.word_vectors,
