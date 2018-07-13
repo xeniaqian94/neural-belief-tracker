@@ -222,7 +222,7 @@ class NBT_model(nn.Module):
 
             precision = precision / f_pred.shape[1]
             recall = recall / f_pred.shape[1]
-            f_score = torch.Tensor([0]) if (recall + precision)==0 else torch.Tesor([(2 * recall * precision) / (recall + precision)])
+            f_score = torch.Tensor([0]) if (recall + precision)==0 else torch.Tensor([(2 * recall * precision) / (recall + precision)])
 
         else:
             predictions = f_pred.round()
