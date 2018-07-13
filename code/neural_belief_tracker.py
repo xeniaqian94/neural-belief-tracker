@@ -186,6 +186,7 @@ class NeuralBeliefTracker:
         self.gpu = config.get("train", "gpu")
         if self.gpu in ["True", "true"]:
             self.device = torch.device("cuda:0")
+            input("set self.device as "+str(self.device))
         else:
             self.device = torch.device("cpu")
         self.dtype = torch.float
