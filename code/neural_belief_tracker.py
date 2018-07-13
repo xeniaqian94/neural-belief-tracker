@@ -423,6 +423,8 @@ class NeuralBeliefTracker:
                 else:
                     loss = self.CELoss(batch_ys_pred, batch_ys.long())  # TODO check index as label
 
+                print("loss.device", loss.device)
+
                 print("minibatch ", batch_ind, "loss", loss)
                 loss.backward()
                 optimizer.step()
@@ -494,7 +496,6 @@ class NeuralBeliefTracker:
 
                 # reference: torch.save(net.state_dict(), './net.pth')
                 # net.load_state_dict(torch.load('./net.pth'))
-
 
         print("The best parameters achieved over all epochs, at validation metric of", round(best_f_score, 4))
 
