@@ -349,15 +349,6 @@ class NeuralBeliefTracker:
         fv_validation, positive_examples_validation, negative_examples_validation = \
             self.generate_data(utterances_val, target_slot)
 
-        val_data = self.generate_examples(target_slot, fv_validation,
-                                          positive_examples_validation,
-                                          negative_examples_validation)  # get data split
-        # val_data is a tuple of (features_full, features_requested_slots, features_confirm_slots,
-        # features_confirm_values, features_delex, y_labels, features_previous_state)
-
-        if val_data is None:
-            print("val data is none")
-
         print_mode = False
 
         # Model training:
@@ -373,6 +364,21 @@ class NeuralBeliefTracker:
         for slot in dialogue_ontology:
             if slot not in ratio:
                 ratio[slot] = int(batch_size / 2)  # fewer negatives - what does this mean?
+
+        print("generating validation examples")
+
+        random_positive_count = ratio[target_slot]  # number of randomly drawn negative example
+        random_negative_count = batch_size - random_positive_count  # number of randomly drawn positive example
+
+        val_data = self.generate_examples(target_slot, fv_validation,
+                                          positive_examples_validation,
+                                          negative_examples_validation, random_positive_count,
+                                          random_negative_count)  # get data split
+        # val_data is a tuple of (features_full, features_requested_slots, features_confirm_slots,
+        # features_confirm_values, features_delex, y_labels, features_previous_state)
+
+        if val_data is None:
+            print("val data is none")
 
         epoch = 0
         last_update = -1
@@ -405,8 +411,12 @@ class NeuralBeliefTracker:
                 # input("training model " + str(self.model_variables[target_slot]))
                 # forward pass, which loss to define
 
+                print("getting forward calculation " + str(batch_xs_full.shape))
+
                 batch_ys_pred = self.model_variables[target_slot](
                     batch_data)
+
+                print("forward finished")
 
                 if target_slot == "request":
                     loss = self.MSELoss(batch_ys_pred, batch_ys)
@@ -764,7 +774,8 @@ class NeuralBeliefTracker:
 
         if target_slot != "request":
             label_count = len(self.dialogue_ontology[target_slot]) + 1  # NONE
-            print("target_slot label_count is " + str(label_count))
+            print("target_slot label_count is " + str(label_count) + " pos_count " + str(
+                pos_example_count) + " neg_count " + str(neg_example_count))
         else:
             label_count = len(self.dialogue_ontology[target_slot])
 

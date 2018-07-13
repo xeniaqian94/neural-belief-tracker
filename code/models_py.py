@@ -16,7 +16,6 @@ class NBT_model(nn.Module):
                  tensor_type=torch.FloatTensor, target_slot=None, value_list=None, longest_utterance_length=40,
                  num_filters=300, drop_out=0.5, lr=1e-4):
         super(NBT_model, self).__init__()
-
         self.slot_emb = embedding(slot_ids)
         self.value_emb = embedding(value_ids)
         self.slot_value_pair_emb = torch.cat((self.slot_emb, self.value_emb), dim=1)  # cs+cv
@@ -189,32 +188,54 @@ class NBT_model(nn.Module):
         (val_xs_full, val_sys_req, val_sys_conf_slots, val_sys_conf_values,
          val_delex, val_ys, val_ys_prev) = val_data
 
+        print("val_xs_full shape  getting forwarded" + str(val_xs_full.shape))
+
         f_pred = self.forward(val_data)
+
+        print("forward finished")
+
+        print("predictions shape ", f_pred.shape)  # batch_size * label_count
+        print("val_ys shape ", val_ys.shape)
 
         if self.use_softmax:
             predictions = f_pred.argmax(1)
+            predictions_one_hot = torch.zeros(f_pred.shape).scatter_(1, predictions.unsqueeze(1).long(), 1)
+
+            true_predictions = val_ys.float()
+            true_predictions_one_hot = torch.zeros(f_pred.shape).scatter_(1, true_predictions.unsqueeze(1).long(), 1)
+
+            correct_prediction = (predictions.long() == true_predictions.long()).float()
+            accuracy = correct_prediction.mean()
+
+            precision = 0.0
+            recall = 0.0
+
+            for ind in range(f_pred.shape[1]):
+                num_positives = true_predictions_one_hot[ind].sum()
+                classified_positives = predictions_one_hot[ind].sum()
+                true_positives = true_predictions_one_hot[ind] * predictions_one_hot[ind]
+                num_true_positives = true_positives.sum()
+                precision += (0 if np.asscalar(classified_positives.data.numpy()) == 0 else np.asscalar(
+                    (1.0 * num_true_positives / classified_positives).data.numpy()))
+                recall += (0 if np.asscalar(num_positives.data.numpy())  == 0 else np.asscalar(
+                    (1.0 * num_true_positives / num_positives).data.numpy()))
+
+            precision = precision / f_pred.shape[1]
+            recall = recall / f_pred.shape[1]
+            f_score = torch.Tensor([0]) if (recall + precision)==0 else torch.Tesor([(2 * recall * precision) / (recall + precision)])
+
         else:
             predictions = f_pred.round()
+            true_predictions = val_ys.float()
 
-        # input(predictions)
-        true_predictions = val_ys.float()
-        predictions=predictions.float()
-        # input(true_predictions)
+            correct_prediction = (predictions.long() == true_predictions.long()).float()
+            num_positives = true_predictions.sum()
+            classified_positives = predictions.sum()
+            true_positives = (predictions * true_predictions)
+            num_true_positives = (true_positives).sum()
+            recall = num_true_positives / num_positives
+            precision = num_true_positives / classified_positives
+            f_score = torch.Tensor([0]) if np.asscalar((recall + precision).data.numpy())==0 else (2 * recall * precision) / (recall + precision)
+            accuracy = correct_prediction.mean()
 
-        correct_prediction = (predictions == true_predictions).float()
-
-        # input(correct_prediction)
-        # input(predictions.sum())
-        accuracy = correct_prediction.mean()
-        num_positives = true_predictions.sum()
-        classified_positives = predictions.sum()
-        # will have ones in all places where both are predicting positives
-        true_positives = predictions * true_predictions
-        # if indicators for positive of both are 1, then it is positive.
-        num_true_positives = true_positives.sum()
-
-        recall = num_true_positives / num_positives
-        precision = num_true_positives / classified_positives
-        f_score = (2 * recall * precision) / (recall + precision)
-
-        return np.asscalar(accuracy.data.numpy())
+        return np.asscalar(f_score.data.numpy())
