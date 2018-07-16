@@ -208,7 +208,7 @@ class NeuralBeliefTracker:
         embedding_value_array = np.array(list(word_vectors.values())).astype(float)
 
         pickle.dump(embedding_value_array,open("embedding_value_array","wb"))
-        embedding = torch.nn.Embedding.from_pretrained(self.FloatTensor(embedding_value_array))
+        embedding = torch.nn.Embedding.from_pretrained(torch.FloatTensor(embedding_value_array))
         if self.device == torch.device("cuda:0"):
             embedding=embedding.cuda()
 
