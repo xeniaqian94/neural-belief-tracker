@@ -65,6 +65,7 @@ class NBT_model(nn.Module):
             self.w_hidden_layer_for_mc=self.w_hidden_layer_for_mc.cuda()
 
         self.combine_coefficient = 0.5
+        self.device=device
 
     def define_CNN_model(self, utterance_representations_full, num_filters=300, vector_dimension=300,
                          longest_utterance_length=40):
@@ -209,6 +210,10 @@ class NBT_model(nn.Module):
 
         print("predictions shape ", f_pred.shape)  # batch_size * label_count
         print("val_ys shape ", val_ys.shape)
+
+        if self.device == torch.device("cuda:0"):
+            f_pred = f_pred.cpu()
+            val_ys = val_ys.cpu()
 
         if self.use_softmax:
             predictions = f_pred.argmax(1)
