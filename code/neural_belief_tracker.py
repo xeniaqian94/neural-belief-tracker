@@ -637,7 +637,7 @@ class NeuralBeliefTracker:
 
             requested_slots = utterances[idx][1]
 
-            current_requested_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),
+            current_requested_vector = self.float_tensor_type(np.zeros((self.embedding_dim,), dtype="float32"),
                                                     device=self.device)
 
             # requested_slot="area"
@@ -669,9 +669,9 @@ class NeuralBeliefTracker:
             #         input("In this example, full_asr is " + str(full_asr) + " cfm_slot: " + str(cfm_slot)+" value: "+curr_confirm_values[ind])
             #         break
 
-            current_conf_slot_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),
+            current_conf_slot_vector = self.float_tensor_type(np.zeros((self.embedding_dim,), dtype="float32"),
                                                     device=self.device)
-            current_conf_value_vector = torch.Tensor(np.zeros((self.embedding_dim,), dtype="float32"),
+            current_conf_value_vector = self.float_tensor_type(np.zeros((self.embedding_dim,), dtype="float32"),
                                                      device=self.device)
 
             confirmation_count = len(curr_confirm_slots)
@@ -722,7 +722,7 @@ class NeuralBeliefTracker:
 
                 # print c_example, asr_coeff
 
-                full_fv = torch.Tensor(
+                full_fv = self.float_tensor_type(
                     np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"),
                     device=self.device)
                 if c_example != "":
@@ -880,7 +880,7 @@ class NeuralBeliefTracker:
             features_confirm_values.append(utterance_fv[3])
             features_delex.append(delex_features)
 
-            prev_belief_state_vector = torch.Tensor(np.zeros((label_count,), dtype="float32"), device=self.device)
+            prev_belief_state_vector = self.float_tensor_type(np.zeros((label_count,), dtype="float32"), device=self.device)
 
             if target_slot != "request":
 
@@ -903,10 +903,10 @@ class NeuralBeliefTracker:
 
         for idx in range(0, positive_count):
             if target_slot != "request":
-                y_labels = torch.Tensor(np.zeros(positive_count + negative_count, dtype="float32"), device=self.device)
+                y_labels = self.float_tensor_type(np.zeros(positive_count + negative_count, dtype="float32"), device=self.device)
                 y_labels[idx] = labels[idx]
             else:
-                y_labels = torch.Tensor(np.zeros((positive_count + negative_count, label_count), dtype="float32"),
+                y_labels = self.float_tensor_type(np.zeros((positive_count + negative_count, label_count), dtype="float32"),
                                         device=self.device)
                 y_labels[idx, :] = labels[idx]
 
