@@ -2,6 +2,7 @@ import configparser as ConfigParser
 import codecs
 import json
 import os
+import pickle
 import random
 import sys
 import time
@@ -205,6 +206,8 @@ class NeuralBeliefTracker:
         self.drop_out = 0.5
 
         embedding_value_array = np.array(list(word_vectors.values())).astype(float)
+
+        pickle.dump(embedding_value_array,open("embedding_value_array","wb"))
         embedding = torch.nn.Embedding.from_pretrained(self.float_tensor_type(embedding_value_array, device=self.device))
         # input(embedding)
         embedding.weight.requires_grad = False
