@@ -12,8 +12,7 @@ class NBT_model(nn.Module):
 
     def __init__(self, vector_dimension, label_count, slot_ids, value_ids, use_delex_features=False,
                  use_softmax=True, value_specific_decoder=False, learn_belief_state_update=True,
-                 embedding=None, dtype=torch.float, device=torch.device("cpu"),
-                 tensor_type=torch.FloatTensor, target_slot=None, value_list=None, longest_utterance_length=40,
+                 embedding=None, float_tensor=torch.FloatTensor, long_tensor=torch.LongTensor, target_slot=None, value_list=None, longest_utterance_length=40,
                  num_filters=300, drop_out=0.5, lr=1e-4):
         super(NBT_model, self).__init__()
         self.slot_emb = embedding(slot_ids)
@@ -37,6 +36,8 @@ class NBT_model(nn.Module):
         self.filter_sizes = [1, 2, 3]
         self.conv_filters = [None, None, None]
         self.hidden_units = 100  # before equation (11)
+        self.float_tensor=float_tensor
+        self.long_tensor=long_tensor
 
         for i, n in enumerate(self.filter_sizes):
             self.conv_filters[i] = nn.Conv1d(self.vector_dimension, self.num_filters, n, bias=True)
@@ -118,7 +119,7 @@ class NBT_model(nn.Module):
                 [candidates_transform.shape[0], 1])
 
             list_of_value_contributions.append(torch.addcmul(
-                torch.zeros(candidates_transform.shape[0], repeat_utterance.shape[1]),
+                self.float_tensor(np.zeros([candidates_transform.shape[0], repeat_utterance.shape[1]])),
                 candidates_transform,
                 repeat_utterance))  # candidates_transform.mul(final_utterance_representation[batch_idx]))
 
@@ -149,7 +150,7 @@ class NBT_model(nn.Module):
 
         y_presoftmax_2 = self.w_joint_presoftmax(self.w_hidden_layer_for_mr(m_r))
 
-        m_c = torch.matmul(torch.addcmul(torch.zeros(self.slot_emb.shape[0], system_act_confirm_slots.shape[0]),
+        m_c = torch.matmul(torch.addcmul(self.float_tensor(np.zeros([self.slot_emb.shape[0], system_act_confirm_slots.shape[0]])),
                                          self.slot_emb.matmul(system_act_confirm_slots.t()),
                                          self.value_emb.matmul(system_act_confirm_values.t())),
                            final_utterance_representation.squeeze(2))
@@ -199,10 +200,10 @@ class NBT_model(nn.Module):
 
         if self.use_softmax:
             predictions = f_pred.argmax(1)
-            predictions_one_hot = torch.zeros(f_pred.shape).scatter_(1, predictions.unsqueeze(1).long(), 1)
+            predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, predictions.unsqueeze(1).long(), 1)
 
             true_predictions = val_ys.float()
-            true_predictions_one_hot = torch.zeros(f_pred.shape).scatter_(1, true_predictions.unsqueeze(1).long(), 1)
+            true_predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, true_predictions.unsqueeze(1).long(), 1)
 
             correct_prediction = (predictions.long() == true_predictions.long()).float()
             accuracy = correct_prediction.mean()
