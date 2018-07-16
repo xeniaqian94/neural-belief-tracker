@@ -12,14 +12,17 @@ class NBT_model(nn.Module):
 
     def __init__(self, vector_dimension, label_count, slot_ids, value_ids, use_delex_features=False,
                  use_softmax=True, value_specific_decoder=False, learn_belief_state_update=True,
-                 embedding=None, float_tensor=torch.FloatTensor, long_tensor=torch.LongTensor, target_slot=None, value_list=None, longest_utterance_length=40,
-                 num_filters=300, drop_out=0.5, lr=1e-4):
+                 embedding=None, float_tensor=torch.FloatTensor, long_tensor=torch.LongTensor, target_slot=None,
+                 value_list=None, longest_utterance_length=40,
+                 num_filters=300, drop_out=0.5, lr=1e-4, device=torch.device("cpu")):
         super(NBT_model, self).__init__()
         self.slot_emb = embedding(slot_ids)
         self.value_emb = embedding(value_ids)
         self.slot_value_pair_emb = torch.cat((self.slot_emb, self.value_emb), dim=1)  # cs+cv
 
         self.w_candidates = nn.Linear(vector_dimension * 2, vector_dimension, bias=True)  # equation (7) in paper 1
+        if device==torch.device("cuda:0"):
+            self.w_candidates=self.w_candidate.cuda()
 
         self.target_slot = target_slot
         self.value_list = value_list
@@ -36,22 +39,30 @@ class NBT_model(nn.Module):
         self.filter_sizes = [1, 2, 3]
         self.conv_filters = [None, None, None]
         self.hidden_units = 100  # before equation (11)
-        self.float_tensor=float_tensor
-        self.long_tensor=long_tensor
+        self.float_tensor = float_tensor
+        self.long_tensor = long_tensor
 
         for i, n in enumerate(self.filter_sizes):
             self.conv_filters[i] = nn.Conv1d(self.vector_dimension, self.num_filters, n, bias=True)
+            if device==torch.device("cuda:0"):
+                self.conv_filters[i]=self.conv_filters[i].cuda()
 
         # Equation 11
         self.w_hidden_layer_for_d = nn.Sequential(nn.Dropout(p=drop_out), nn.Sigmoid(),
                                                   nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
-        # F.sigmoid(nn.Linear(self.vector_dimension, self.hidden_units, bias=True)), p=drop_out)
+
         self.w_joint_presoftmax = nn.Sequential(nn.Sigmoid(), nn.Linear(self.hidden_units, 1, bias=True))
 
         self.w_hidden_layer_for_mr = nn.Sequential(nn.Dropout(p=drop_out), nn.Sigmoid(),
                                                    nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
         self.w_hidden_layer_for_mc = nn.Sequential(nn.Dropout(p=drop_out), nn.Sigmoid(),
                                                    nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
+
+        if device == torch.device("cuda:0"):
+            self.w_hidden_layer_for_d=self.w_hidden_layer_for_d.cuda()
+            self.w_joint_presoftmax=self.w_joint_presoftmax.cuda()
+            self.w_hidden_layer_for_mr=self.w_hidden_layer_for_mr.cuda()
+            self.w_hidden_layer_for_mc=self.w_hidden_layer_for_mc.cuda()
 
         self.combine_coefficient = 0.5
 
@@ -150,10 +161,11 @@ class NBT_model(nn.Module):
 
         y_presoftmax_2 = self.w_joint_presoftmax(self.w_hidden_layer_for_mr(m_r))
 
-        m_c = torch.matmul(torch.addcmul(self.float_tensor(np.zeros([self.slot_emb.shape[0], system_act_confirm_slots.shape[0]])),
-                                         self.slot_emb.matmul(system_act_confirm_slots.t()),
-                                         self.value_emb.matmul(system_act_confirm_values.t())),
-                           final_utterance_representation.squeeze(2))
+        m_c = torch.matmul(
+            torch.addcmul(self.float_tensor(np.zeros([self.slot_emb.shape[0], system_act_confirm_slots.shape[0]])),
+                          self.slot_emb.matmul(system_act_confirm_slots.t()),
+                          self.value_emb.matmul(system_act_confirm_values.t())),
+            final_utterance_representation.squeeze(2))
         y_presoftmax_3 = self.w_joint_presoftmax(self.w_hidden_layer_for_mc(m_c))
 
         # Equation 11 again, lol
@@ -200,10 +212,12 @@ class NBT_model(nn.Module):
 
         if self.use_softmax:
             predictions = f_pred.argmax(1)
-            predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, predictions.unsqueeze(1).long(), 1)
+            predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, predictions.unsqueeze(1).long(),
+                                                                                     1)
 
             true_predictions = val_ys.float()
-            true_predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, true_predictions.unsqueeze(1).long(), 1)
+            true_predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, true_predictions.unsqueeze(
+                1).long(), 1)
 
             correct_prediction = (predictions.long() == true_predictions.long()).float()
             accuracy = correct_prediction.mean()
@@ -218,12 +232,13 @@ class NBT_model(nn.Module):
                 num_true_positives = true_positives.sum()
                 precision += (0 if np.asscalar(classified_positives.data.numpy()) == 0 else np.asscalar(
                     (1.0 * num_true_positives / classified_positives).data.numpy()))
-                recall += (0 if np.asscalar(num_positives.data.numpy())  == 0 else np.asscalar(
+                recall += (0 if np.asscalar(num_positives.data.numpy()) == 0 else np.asscalar(
                     (1.0 * num_true_positives / num_positives).data.numpy()))
 
             precision = precision / f_pred.shape[1]
             recall = recall / f_pred.shape[1]
-            f_score = torch.Tensor([0]) if (recall + precision)==0 else torch.Tensor([(2 * recall * precision) / (recall + precision)])
+            f_score = torch.Tensor([0]) if (recall + precision) == 0 else torch.Tensor(
+                [(2 * recall * precision) / (recall + precision)])
 
         else:
             predictions = f_pred.round()
@@ -236,7 +251,9 @@ class NBT_model(nn.Module):
             num_true_positives = (true_positives).sum()
             recall = num_true_positives / num_positives
             precision = num_true_positives / classified_positives
-            f_score = torch.Tensor([0]) if np.asscalar((recall + precision).data.numpy())==0 else (2 * recall * precision) / (recall + precision)
+            f_score = torch.Tensor([0]) if np.asscalar((recall + precision).data.numpy()) == 0 else (
+                                                                                                                2 * recall * precision) / (
+                                                                                                                recall + precision)
             accuracy = correct_prediction.mean()
 
         return np.asscalar(f_score.data.numpy())

@@ -189,14 +189,13 @@ class NeuralBeliefTracker:
             self.device = torch.device("cuda:0")
             # input("set self.device as "+str(self.device))
             self.float_tensor_type = torch.cuda.FloatTensor
-            self.long_tensor_type=torch.cuda.LongTensor
+            self.long_tensor_type = torch.cuda.LongTensor
         else:
             self.device = torch.device("cpu")
             self.float_tensor_type = torch.FloatTensor
             self.long_tensor_type = torch.LongTensor
 
         self.dtype = torch.float
-
 
         # Neural Net Initialisation (keep variables packed so we can move them to either method):
         self.model_variables = {}
@@ -207,10 +206,9 @@ class NeuralBeliefTracker:
 
         embedding_value_array = np.array(list(word_vectors.values())).astype(float)
 
-        pickle.dump(embedding_value_array,open("embedding_value_array","wb"))
         embedding = torch.nn.Embedding.from_pretrained(torch.FloatTensor(embedding_value_array))
         if self.device == torch.device("cuda:0"):
-            embedding=embedding.cuda()
+            embedding = embedding.cuda()
 
         # embedding = torch.nn.Embedding.from_pretrained(self.float_tensor_type(embedding_value_array, device=self.device))
         # input(embedding)
@@ -220,8 +218,10 @@ class NeuralBeliefTracker:
             print("Initialisation of model variables for slot: " + slot)
             if slot == "request":
 
-                slot_ids = self.long_tensor_type(np.zeros(len(dialogue_ontology[slot]), dtype="int"), device=self.device)
-                value_ids = self.long_tensor_type(np.zeros(len(dialogue_ontology[slot]), dtype="int"), device=self.device)
+                slot_ids = self.long_tensor_type(np.zeros(len(dialogue_ontology[slot]), dtype="int"),
+                                                 device=self.device)
+                value_ids = self.long_tensor_type(np.zeros(len(dialogue_ontology[slot]), dtype="int"),
+                                                  device=self.device)
 
                 for value_idx, value in enumerate(dialogue_ontology[slot]):
                     slot_ids[value_idx] = self.w2i_dict[slot]
@@ -234,11 +234,14 @@ class NeuralBeliefTracker:
                                                        value_specific_decoder=self.value_specific_decoder,
                                                        learn_belief_state_update=self.learn_belief_state_update,
                                                        embedding=embedding,
-                                                       float_tensor=self.float_tensor_type,long_tensor=self.long_tensor_type,
+                                                       float_tensor=self.float_tensor_type,
+                                                       long_tensor=self.long_tensor_type,
                                                        target_slot=slot,
-                                                       value_list=dialogue_ontology[slot], drop_out=self.drop_out)
+                                                       value_list=dialogue_ontology[slot], drop_out=self.drop_out,
+                                                       device=self.device)
             else:
-                slot_ids = self.long_tensor_type(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"), device=self.device)
+                slot_ids = self.long_tensor_type(np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"),
+                                                 device=self.device)
                 value_ids = self.long_tensor_type(
                     np.zeros(len(dialogue_ontology[slot]) + 1, dtype="int"), device=self.device)  # this includes None
 
@@ -256,7 +259,8 @@ class NeuralBeliefTracker:
                                                        float_tensor=self.float_tensor_type,
                                                        long_tensor=self.long_tensor_type,
                                                        target_slot=slot,
-                                                       value_list=dialogue_ontology[slot], drop_out=self.drop_out)
+                                                       value_list=dialogue_ontology[slot], drop_out=self.drop_out,
+                                                       device=self.device)
 
         self.dialogue_ontology = dialogue_ontology
 
@@ -638,7 +642,7 @@ class NeuralBeliefTracker:
             requested_slots = utterances[idx][1]
 
             current_requested_vector = self.float_tensor_type(np.zeros((self.embedding_dim,), dtype="float32"),
-                                                    device=self.device)
+                                                              device=self.device)
 
             # requested_slot="area"
             # print("w2i contains this word " + str(str(requested_slot) in self.w2i_dict.keys()))
@@ -670,9 +674,9 @@ class NeuralBeliefTracker:
             #         break
 
             current_conf_slot_vector = self.float_tensor_type(np.zeros((self.embedding_dim,), dtype="float32"),
-                                                    device=self.device)
+                                                              device=self.device)
             current_conf_value_vector = self.float_tensor_type(np.zeros((self.embedding_dim,), dtype="float32"),
-                                                     device=self.device)
+                                                               device=self.device)
 
             confirmation_count = len(curr_confirm_slots)
 
@@ -880,7 +884,8 @@ class NeuralBeliefTracker:
             features_confirm_values.append(utterance_fv[3])
             features_delex.append(delex_features)
 
-            prev_belief_state_vector = self.float_tensor_type(np.zeros((label_count,), dtype="float32"), device=self.device)
+            prev_belief_state_vector = self.float_tensor_type(np.zeros((label_count,), dtype="float32"),
+                                                              device=self.device)
 
             if target_slot != "request":
 
@@ -903,11 +908,13 @@ class NeuralBeliefTracker:
 
         for idx in range(0, positive_count):
             if target_slot != "request":
-                y_labels = self.float_tensor_type(np.zeros(positive_count + negative_count, dtype="float32"), device=self.device)
+                y_labels = self.float_tensor_type(np.zeros(positive_count + negative_count, dtype="float32"),
+                                                  device=self.device)
                 y_labels[idx] = labels[idx]
             else:
-                y_labels = self.float_tensor_type(np.zeros((positive_count + negative_count, label_count), dtype="float32"),
-                                        device=self.device)
+                y_labels = self.float_tensor_type(
+                    np.zeros((positive_count + negative_count, label_count), dtype="float32"),
+                    device=self.device)
                 y_labels[idx, :] = labels[idx]
 
         if target_slot != "request":
