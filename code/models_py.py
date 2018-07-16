@@ -22,7 +22,7 @@ class NBT_model(nn.Module):
 
         self.w_candidates = nn.Linear(vector_dimension * 2, vector_dimension, bias=True)  # equation (7) in paper 1
         if device==torch.device("cuda:0"):
-            self.w_candidates=self.w_candidate.cuda()
+            self.w_candidates=self.w_candidates.cuda()
 
         self.target_slot = target_slot
         self.value_list = value_list
