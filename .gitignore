@@ -5,3 +5,5 @@ word-vectors/*
 models/*
 results/*
 
+config/woz_stat_update_py.cfg
+

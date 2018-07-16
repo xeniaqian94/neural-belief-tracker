@@ -72,6 +72,8 @@ class NeuralBeliefTracker:
 
         word_vectors = load_word_vectors(word_vector_destination, primary_language=language)  # dict {} type
 
+        print("len(word_vectors)", len(word_vectors))
+
         word_vectors["tag-slot"] = xavier_vector("tag-slot")
         word_vectors["tag-value"] = xavier_vector("tag-value")
 
@@ -208,7 +210,10 @@ class NeuralBeliefTracker:
         embedding_value_array = np.array(list(word_vectors.values())).astype(float)
 
         pickle.dump(embedding_value_array,open("embedding_value_array","wb"))
-        embedding = torch.nn.Embedding.from_pretrained(self.float_tensor_type(embedding_value_array, device=self.device))
+        embedding = torch.nn.Embedding.from_pretrained(self.FloatTensor(embedding_value_array))
+        if self.device == torch.device("cuda:0"):
+            embedding=embedding.cuda()
+
         # input(embedding)
         embedding.weight.requires_grad = False
 
