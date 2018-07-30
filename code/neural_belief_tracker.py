@@ -2,8 +2,6 @@ import configparser as ConfigParser
 import codecs
 import json
 import os
-import pickle
-import random
 import sys
 import time
 import torch
@@ -59,8 +57,8 @@ class NeuralBeliefTracker:
         self.batch_size = int(config.get("train", "batch_size"))
 
         self.lr = float(config.get("train", "lr"))
-        self.CELoss = nn.CrossEntropyLoss()
-        self.MSELoss = nn.MSELoss()
+        self.CELoss = nn.CrossEntropyLoss(size_average=False)
+        self.MSELoss = nn.MSELoss(size_average=False)
 
         if not os.path.isfile(word_vector_destination):
             print("Vectors not there, downloading small Paragram and putting it there.")
@@ -227,6 +225,8 @@ class NeuralBeliefTracker:
                     slot_ids[value_idx] = self.w2i_dict[slot]
                     value_ids[value_idx] = self.w2i_dict[value]
 
+                print("value id match?", value, self.w2i_dict[value], value_ids[len(dialogue_ontology[slot]) - 1])
+
                 self.model_variables[slot] = NBT_model(word_vector_size, len(dialogue_ontology[slot]),
                                                        slot_ids, value_ids,
                                                        use_delex_features=self.use_delex_features,
@@ -345,12 +345,6 @@ class NeuralBeliefTracker:
 
         _, utterances_val2 = load_woz_data(
             "data/" + dataset_name + "/" + dataset_name + "_validate_" + language + ".json", language)
-        val_count = len(utterances_val2)
-
-        # utterances_train = utterances_train2 + utterances_val2[0:int(
-        #     0.75 * val_count)]  # increment training set. Original split: 600+200+400
-        # utterances_val = utterances_val2[
-        #                  int(0.75 * val_count):]  # Current split: 750+50+400  # get real index-ed validation utterances
 
         utterances_train = utterances_train2
         utterances_val = utterances_val2
@@ -363,6 +357,8 @@ class NeuralBeliefTracker:
         feature_vectors, positive_examples, negative_examples = self.generate_data(utterances_train, target_slot)
 
         print("Generating data for validation set:")
+        print("positive examples", positive_examples)
+        print("negative examples", negative_examples)
         # same for validation (can pre-compute full representation, will be used after each epoch):
         fv_validation, positive_examples_validation, negative_examples_validation = \
             self.generate_data(utterances_val, target_slot)
@@ -392,8 +388,6 @@ class NeuralBeliefTracker:
                                           positive_examples_validation,
                                           negative_examples_validation, random_positive_count,
                                           random_negative_count)  # get data split
-        # val_data is a tuple of (features_full, features_requested_slots, features_confirm_slots,
-        # features_confirm_values, features_delex, y_labels, features_previous_state)
 
         if val_data is None:
             print("val data is none")
@@ -401,7 +395,7 @@ class NeuralBeliefTracker:
         epoch = 0
         last_update = -1
 
-        optimizer = optim.SGD(self.model_variables[target_slot].parameters(), lr=self.lr, momentum=0.9)
+        optimizer = optim.Adam(self.model_variables[target_slot].parameters(), lr=self.lr)  # , momentum=0.9)
 
         while epoch < max_epoch:
 
@@ -423,6 +417,8 @@ class NeuralBeliefTracker:
                                                     negative_examples, random_positive_count,
                                                     random_negative_count)
 
+                batch_data = val_data  # use the same set of data to train and test
+
                 (batch_xs_full, batch_sys_req, batch_sys_conf_slots, batch_sys_conf_values,
                  batch_delex, batch_ys, batch_ys_prev) = batch_data
 
@@ -434,10 +430,19 @@ class NeuralBeliefTracker:
                 batch_ys_pred = self.model_variables[target_slot](
                     batch_data)
 
+                # input(self.model_variables[target_slot](
+                #     batch_data).__dict__)
+
                 print("forward finished")
 
                 if target_slot == "request":
+                    print("batch_ys_pred", batch_ys_pred)
+                    print("batch_ys", batch_ys)
+
                     loss = self.MSELoss(batch_ys_pred, batch_ys)
+
+                    # loss = ((1 - batch_ys_pred) * (1 - batch_ys_pred) * batch_ys).sum() * 1 + (
+                    #             batch_ys_pred * batch_ys_pred * (1 - batch_ys)).sum() * 0.2
                 else:
                     loss = self.CELoss(batch_ys_pred, batch_ys.long())  # TODO check index as label
 
@@ -447,19 +452,6 @@ class NeuralBeliefTracker:
                 loss.backward()
                 optimizer.step()
 
-                # print(batch_ys.shape, batch_ys_pred.shape, 'aligned? ')
-
-                # [_, cf, cp, cr, ca] = sess.run([train_step, f_score, precision, recall, accuracy],
-                #                                feed_dict={x_full: batch_xs_full, \
-                #                                           x_delex: batch_delex, \
-                #                                           requested_slots: batch_sys_req, \
-                #                                           system_act_confirm_slots: batch_sys_conf_slots, \
-                #                                           system_act_confirm_values: batch_sys_conf_values, \
-                #                                           y_: batch_ys, y_past_state: batch_ys_prev, keep_prob: 0.5})
-
-            # ================================ VALIDATION ==============================================
-
-            epoch_print_step = 1
             if epoch % 5 == 0 or epoch == 1:
                 if epoch == 1:
                     print("Epoch", "0", "to", epoch, "took", round(time.time() - start_time, 2), "seconds.")
@@ -474,7 +466,7 @@ class NeuralBeliefTracker:
             # val_batch_ys_pred=self.model_variables[target_slot](val_data)
 
             stime = time.time()
-            current_metric = self.model_variables[target_slot].eval_model(val_data)
+            current_metric, metric_name = self.model_variables[target_slot].eval_model(val_data)
 
             # current_f_score = self.model_variables[target_slot].evaluate_model(val_data,
             #                                                                    dialogue_ontology,
@@ -482,7 +474,8 @@ class NeuralBeliefTracker:
             #                                                                    negative_examples_validation,
             #                                                                    print_mode=True, epoch_id=epoch + 1)
             # current_metric = current_f_score
-            print(" Validation metric for slot at current epoch:", target_slot, " :", round(current_metric, 5),
+            print(" Validation metric for slot at current epoch:", target_slot, metric_name, " :",
+                  round(current_metric, 5),
                   " eval took", round(
                     time.time() - stime, 2), "last update at:", last_update, "/", max_epoch)
 
@@ -596,6 +589,7 @@ class NeuralBeliefTracker:
                                 4]:  # utterances are ((trans, asr), sys_req_act, sys_conf, labels)
                                 values_expressed.append(value_idx)
 
+                        # print("This is a positive example, ", (utterance_idx, utterance, values_expressed))
                         positive_examples[slot].append((utterance_idx, utterance, values_expressed))
 
         return feature_vectors, positive_examples, negative_examples
@@ -679,6 +673,10 @@ class NeuralBeliefTracker:
                                                                device=self.device)
 
             confirmation_count = len(curr_confirm_slots)
+
+            if confirmation_count > 1:
+                print(curr_confirm_slots)
+                print(curr_confirm_values)
 
             for sub_idx in range(0, confirmation_count):
                 current_cslot = curr_confirm_slots[sub_idx]
@@ -826,6 +824,7 @@ class NeuralBeliefTracker:
 
         for idx in positive_indices:
             examples.append(positive_examples[target_slot][idx])
+            # print("these are positive examples ",positive_examples[target_slot][idx])
         if negative_count > 0:
             for idx in negative_indices:
                 examples.append(negative_examples[target_slot][idx])
@@ -849,6 +848,7 @@ class NeuralBeliefTracker:
         for idx_example, example in enumerate(examples):
 
             (utterance_idx, utterance, value_idx) = example
+
             utterance_fv = feature_vectors[utterance_idx]  # self.longest_ * self.embedding_dim
 
             # prev belief state is in utterance[5]
@@ -906,15 +906,18 @@ class NeuralBeliefTracker:
         features_delex = torch.stack(features_delex)
         features_previous_state = torch.stack(features_previous_state)
 
+        if target_slot != "request":
+            y_labels = self.float_tensor_type(np.zeros(positive_count + negative_count, dtype="float32"),
+                                              device=self.device)
+        else:
+            y_labels = self.float_tensor_type(
+                np.zeros((positive_count + negative_count, label_count), dtype="float32"),
+                device=self.device)
+
         for idx in range(0, positive_count):
             if target_slot != "request":
-                y_labels = self.float_tensor_type(np.zeros(positive_count + negative_count, dtype="float32"),
-                                                  device=self.device)
                 y_labels[idx] = labels[idx]
             else:
-                y_labels = self.float_tensor_type(
-                    np.zeros((positive_count + negative_count, label_count), dtype="float32"),
-                    device=self.device)
                 y_labels[idx, :] = labels[idx]
 
         if target_slot != "request":
@@ -979,7 +982,7 @@ class NeuralBeliefTracker:
         list_of_belief_states = []
 
         dialogue_count = len(dialogues)
-        input("DIALOGUE COUNT: ", dialogue_count)
+        print("DIALOGUE COUNT: ", dialogue_count)
 
         for idx in range(0, dialogue_count):
 

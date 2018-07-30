@@ -694,27 +694,20 @@ def test_utterance(sess, utterances, word_vectors, dialogue_ontology, model_vari
 
 
 def main():
-    try:
-        config_filepath = sys.argv[2]
-    except:
-        print("Config not specified.")
-        return
+    config_filepath = sys.argv[2]
 
     NBT = NeuralBeliefTracker(config_filepath)  # initialize everything
 
     do_training = False
     do_woz = False
 
-    try:
-        switch = sys.argv[1]
-        if switch == "train":
-            do_training = True
-        elif switch == "woz":  # test on woz
-            do_woz = True
-    except:
-        print("Training/Testing not specified, defaulting to input testing.")
+    switch = sys.argv[1]
+    if switch == "train":
+        do_training = True
+    elif switch == "woz":  # test on woz
+        do_woz = True
 
-    print("NBT loaded")
+
     if do_training:
         NBT.train()
     elif do_woz:

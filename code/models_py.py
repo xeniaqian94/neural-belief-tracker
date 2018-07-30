@@ -1,15 +1,10 @@
-import math
-import time
-
 import torch
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
-import torch.optim as optim
 
 
 class NBT_model(nn.Module):
-
     def __init__(self, vector_dimension, label_count, slot_ids, value_ids, use_delex_features=False,
                  use_softmax=True, value_specific_decoder=False, learn_belief_state_update=True,
                  embedding=None, float_tensor=torch.FloatTensor, long_tensor=torch.LongTensor, target_slot=None,
@@ -17,17 +12,21 @@ class NBT_model(nn.Module):
                  num_filters=300, drop_out=0.5, lr=1e-4, device=torch.device("cpu")):
         super(NBT_model, self).__init__()
         self.slot_emb = embedding(slot_ids)
+        print("self.slot_emb.shape", self.slot_emb.shape)
         self.value_emb = embedding(value_ids)
-        self.slot_value_pair_emb = torch.cat((self.slot_emb, self.value_emb), dim=1)  # cs+cv
+        # self.slot_value_pair_emb = torch.cat((self.slot_emb, self.value_emb), dim=1)  # cs+cv
+        # self.w_candidates = nn.Linear(vector_dimension * 2, vector_dimension, bias=True)  # equation (7) in paper 1
+        self.slot_value_pair_emb = self.slot_emb + self.value_emb  # TODO: double check cs+cv in equation (7)
+        self.w_candidates = nn.Linear(vector_dimension, vector_dimension, bias=True)  # equation (7) in paper 1
 
-        self.w_candidates = nn.Linear(vector_dimension * 2, vector_dimension, bias=True)  # equation (7) in paper 1
-        if device==torch.device("cuda:0"):
-            self.w_candidates=self.w_candidates.cuda()
+        if device == torch.device("cuda:0"):
+            self.w_candidates = self.w_candidates.cuda()
 
         self.target_slot = target_slot
         self.value_list = value_list
         self.filter_sizes = [1, 2, 3]
         self.num_filters = 300
+        self.drop_out = drop_out
         self.hidden_utterance_size = self.num_filters  # * len(filter_sizes)
         self.vector_dimension = vector_dimension
         self.longest_utterance_length = longest_utterance_length
@@ -38,37 +37,44 @@ class NBT_model(nn.Module):
         self.use_delex_features = use_delex_features
         self.filter_sizes = [1, 2, 3]
         self.conv_filters = [None, None, None]
+        self.dnn_filters = [None, None, None]
         self.hidden_units = 100  # before equation (11)
         self.float_tensor = float_tensor
         self.long_tensor = long_tensor
 
         for i, n in enumerate(self.filter_sizes):
+
             self.conv_filters[i] = nn.Conv1d(self.vector_dimension, self.num_filters, n, bias=True)
-            if device==torch.device("cuda:0"):
-                self.conv_filters[i]=self.conv_filters[i].cuda()
+            self.dnn_filters[i] = nn.Sequential(nn.Sigmoid(),
+                                                nn.Linear(n, 1, bias=True))
+
+            if device == torch.device("cuda:0"):
+                self.conv_filters[i] = self.conv_filters[i].cuda()
+                self.dnn_filters[i] = self.dnn_filters[i].cuda()
 
         # Equation 11
-        self.w_hidden_layer_for_d = nn.Sequential(nn.Dropout(p=drop_out), nn.Sigmoid(),
+
+        self.w_hidden_layer_for_d = nn.Sequential(nn.Sigmoid(),
                                                   nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
 
         self.w_joint_presoftmax = nn.Sequential(nn.Sigmoid(), nn.Linear(self.hidden_units, 1, bias=True))
 
-        self.w_hidden_layer_for_mr = nn.Sequential(nn.Dropout(p=drop_out), nn.Sigmoid(),
+        self.w_hidden_layer_for_mr = nn.Sequential(nn.Sigmoid(),
                                                    nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
-        self.w_hidden_layer_for_mc = nn.Sequential(nn.Dropout(p=drop_out), nn.Sigmoid(),
+        self.w_hidden_layer_for_mc = nn.Sequential(nn.Sigmoid(),
                                                    nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
 
         if device == torch.device("cuda:0"):
-            self.w_hidden_layer_for_d=self.w_hidden_layer_for_d.cuda()
-            self.w_joint_presoftmax=self.w_joint_presoftmax.cuda()
-            self.w_hidden_layer_for_mr=self.w_hidden_layer_for_mr.cuda()
-            self.w_hidden_layer_for_mc=self.w_hidden_layer_for_mc.cuda()
+            self.w_hidden_layer_for_d = self.w_hidden_layer_for_d.cuda()
+            self.w_joint_presoftmax = self.w_joint_presoftmax.cuda()
+            self.w_hidden_layer_for_mr = self.w_hidden_layer_for_mr.cuda()
+            self.w_hidden_layer_for_mc = self.w_hidden_layer_for_mc.cuda()
 
         self.combine_coefficient = 0.5
-        self.device=device
+        self.device = device
 
-    def define_CNN_model(self, utterance_representations_full, num_filters=300, vector_dimension=300,
-                         longest_utterance_length=40):
+    def define_DNN_model(self, utterance_representation_full):
+
         """
         Better code for defining the CNN model.
 
@@ -76,14 +82,49 @@ class NBT_model(nn.Module):
         utterance_representations_full: shape minibatch_size * seqLen * emb_dim -> reshape to minibatch_size * emb_dim * seqLen
 
         """
-        input = utterance_representations_full.permute(0, 2, 1)
+        inputTensor = utterance_representation_full.permute(0, 2, 1)  # 512 * 300 * 40
+        # print(input)
+        #
+        # input("Input: whether self final vectores are zero " + str(inputTensor[3, -5:, -5:]))
+
+        for i, n in enumerate(self.filter_sizes):
+            r_n = inputTensor[:, :, :n]
+            for start in range(1, self.longest_utterance_length - n):
+                end = start + n
+                r_n += inputTensor[:, :, start:end]
+
+            # input("Input: rn in equation (2), 512 * 300 * n " + str(r_n.shape))
+
+            r_n = self.dnn_filters[i](r_n)
+            # input("Input: rn in equation (3), 512 * 300 * 1 " + str(r_n.shape))
+
+            if i == 0:
+                final_utterance = r_n
+            else:
+                final_utterance += r_n
+
+        return final_utterance
+
+    def define_CNN_model(self, utterance_representations_full):
+        """
+        Better code for defining the CNN model.
+
+
+        utterance_representations_full: shape minibatch_size * seqLen * emb_dim -> reshape to minibatch_size * emb_dim * seqLen
+
+        """
+        inputTensor = utterance_representations_full.permute(0, 2, 1)
         # print("permuted utterance_representations_full", input.shape)  # (minibatch_size, num_filter, seqLen-n+1)
         output = [None] * len(self.filter_sizes)
 
         for i, n in enumerate(self.filter_sizes):
-            output[i] = F.relu(self.conv_filters[i](input))
-            # print(output[i].shape)
-            output[i] = F.max_pool1d(output[i], input.shape[2] - n + 1)
+            print("input.shape", inputTensor.shape)
+            output[i] = F.relu(self.conv_filters[i](inputTensor))
+            print("output[i].shape " + str(output[i].shape))
+            print("input.shape[2]-n+1 " + str(inputTensor.shape[2] - n + 1))
+
+            output[i] = F.max_pool1d(output[i], inputTensor.shape[2] - n + 1)
+            print("output[i].shape " + str(output[i].shape))
 
         final_utterance = output[0]
 
@@ -110,14 +151,24 @@ class NBT_model(nn.Module):
 
         # print("within model forward "+str(utterance_representations_full))
 
+        # candidates_transform = F.sigmoid(self.w_candidates(
+        #     self.slot_value_pair_emb))  # equation (7) in paper 1, candidates_transform has size len(value_list) * vector_dimension
+
         candidates_transform = F.sigmoid(self.w_candidates(
             self.slot_value_pair_emb))  # equation (7) in paper 1, candidates_transform has size len(value_list) * vector_dimension
+
+        # input("candidates_transform.shape"+str(candidates_transform.shape))
+
         # print("candidates_transofrm shape " + str(candidates_transform.shape))
         # print("current target slot is "+self.target_slot)
         # input("c_size "+str(c.shape))
 
-        # TODO 1 after dragon-boat: change CNN filtering -> h_utterance_represetnation code logic in PyTorch
-        final_utterance_representation = self.define_CNN_model(utterance_representations_full)
+        # final_utterance_representation = self.define_CNN_model(utterance_representations_full)
+
+        final_utterance_representation = self.define_DNN_model(utterance_representations_full)
+
+        # print(final_utterance_representation)
+        # print("selected final_utterance_representation", final_utterance_representation[:3])
 
         # Next, multiply candidates [label_size, vector_dimension] each with the uttereance representations [None, vector_dimension], to get [None, label_size, vector_dimension]
         # or utterance [None, vector_dimension] X [vector_dimension, label_size] to get [None, label_size]
@@ -142,7 +193,8 @@ class NBT_model(nn.Module):
         # y_presoftmax_1 = torch.reshape(self.w_joint_presoftmax(self.w_joint_hidden_layer(list_of_value_contributions)),
         #                                [-1, list_of_value_contributions.shape[1]])
 
-        y_presoftmax_1 = self.w_joint_presoftmax(self.w_hidden_layer_for_d(list_of_value_contributions))
+        y_presoftmax_1 = self.w_joint_presoftmax(
+            F.dropout(self.w_hidden_layer_for_d(list_of_value_contributions), p=self.drop_out, training=self.training))
 
         # print(y_presoftmax_1.shape, "hopefully is minibatch_size * label_size * vector_dimension")
 
@@ -160,14 +212,16 @@ class NBT_model(nn.Module):
         m_r = torch.matmul(self.slot_emb.matmul(system_act_slots.t()),
                            final_utterance_representation.squeeze(2))
 
-        y_presoftmax_2 = self.w_joint_presoftmax(self.w_hidden_layer_for_mr(m_r))
+        y_presoftmax_2 = self.w_joint_presoftmax(
+            F.dropout(self.w_hidden_layer_for_mr(m_r), p=self.drop_out, training=self.training))
 
         m_c = torch.matmul(
             torch.addcmul(self.float_tensor(np.zeros([self.slot_emb.shape[0], system_act_confirm_slots.shape[0]])),
                           self.slot_emb.matmul(system_act_confirm_slots.t()),
                           self.value_emb.matmul(system_act_confirm_values.t())),
             final_utterance_representation.squeeze(2))
-        y_presoftmax_3 = self.w_joint_presoftmax(self.w_hidden_layer_for_mc(m_c))
+        y_presoftmax_3 = self.w_joint_presoftmax(
+            F.dropout(self.w_hidden_layer_for_mc(m_c), p=self.drop_out, training=self.training))
 
         # Equation 11 again, lol
         y_presoftmax = y_presoftmax_1 + y_presoftmax_2 + y_presoftmax_3
@@ -193,11 +247,14 @@ class NBT_model(nn.Module):
             y = F.sigmoid(y_presoftmax).squeeze(2)  # comparative max is okay?
             print("predicting request with sigmoid, loss is L2-MSE")
 
-        # y = y.squeeze(2)
+        print("f_pred", y)
 
         return y
 
     def eval_model(self, val_data):
+
+        self.eval()
+        # input("setting to eval mode " + str(self.training))
 
         (val_xs_full, val_sys_req, val_sys_conf_slots, val_sys_conf_values,
          val_delex, val_ys, val_ys_prev) = val_data
@@ -247,18 +304,21 @@ class NBT_model(nn.Module):
 
         else:
             predictions = f_pred.round()
+            print("validation: rounded predictions ", predictions)
             true_predictions = val_ys.float()
+            print("validation: val_ys", val_ys)
 
             correct_prediction = (predictions.long() == true_predictions.long()).float()
             num_positives = true_predictions.sum()
+            print("num_positives", num_positives)
             classified_positives = predictions.sum()
             true_positives = (predictions * true_predictions)
             num_true_positives = (true_positives).sum()
             recall = num_true_positives / num_positives
             precision = num_true_positives / classified_positives
             f_score = torch.Tensor([0]) if np.asscalar((recall + precision).data.numpy()) == 0 else (
-                                                                                                                2 * recall * precision) / (
-                                                                                                                recall + precision)
-            accuracy = correct_prediction.mean()
+                                                                                                            2 * recall * precision) / (
+                                                                                                            recall + precision)
+            accuracy = np.asscalar(correct_prediction.mean().data.numpy())
 
-        return np.asscalar(f_score.data.numpy())
+        return accuracy, "accuracy"

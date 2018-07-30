@@ -325,12 +325,12 @@ def load_woz_data(file_path, language, percentage=1.0, override_en_ontology=Fals
     return (dialogues, training_turns)
 
 
-def binary_mask(example, requestable_count):
+def binary_mask(example, requestable_count,tensor_type=torch.FloatTensor):
     """
     takes a list, i.e. 2,3,4, and if req count is 8, returns: 00111000
     """
 
-    zeros = torch.Tensor(np.zeros((requestable_count,), dtype=np.float32))
+    zeros =tensor_type(np.zeros((requestable_count,), dtype=np.float32))
     for x in example:
         zeros[x] = 1
 
