@@ -1661,8 +1661,8 @@ class NeuralBeliefTracker:
         # a bit of hard-coding to make our lives easier. 
         if u"price" in word_vectors and u"range" in word_vectors:
             word_vectors[u"price range"] = word_vectors[u"price"] + word_vectors[u"range"]
-        if u"post" in word_vectors and u"code" in word_vectors:
-            word_vectors[u"postcode"] = word_vectors[u"post"] + word_vectors[u"code"]
+        if u"post" in word_vectors and u"source" in word_vectors:
+            word_vectors[u"postcode"] = word_vectors[u"post"] + word_vectors[u"source"]
         if u"dont" in word_vectors and u"care" in word_vectors:
             word_vectors[u"dontcare"] = word_vectors[u"dont"] + word_vectors[u"care"]
         if u"addressess" in word_vectors:

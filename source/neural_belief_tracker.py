@@ -9,8 +9,8 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 
-from code.models_py import NBT_model
-from code.utils import load_word_vectors, xavier_vector, w2i, i2w, load_woz_data, process_turn_hyp, binary_mask, \
+from source.models_py import NBT_model
+from source.utils import load_word_vectors, xavier_vector, w2i, i2w, load_woz_data, process_turn_hyp, binary_mask, \
     delexicalise_utterance_values
 
 
@@ -84,8 +84,8 @@ class NeuralBeliefTracker:
         # a bit of hard-coding to make our lives easier.
         if u"price" in word_vectors and u"range" in word_vectors:
             word_vectors[u"price range"] = word_vectors[u"price"] + word_vectors[u"range"]
-        if u"post" in word_vectors and u"code" in word_vectors:
-            word_vectors[u"postcode"] = word_vectors[u"post"] + word_vectors[u"code"]
+        if u"post" in word_vectors and u"source" in word_vectors:
+            word_vectors[u"postcode"] = word_vectors[u"post"] + word_vectors[u"source"]
         if u"dont" in word_vectors and u"care" in word_vectors:
             word_vectors[u"dontcare"] = word_vectors[u"dont"] + word_vectors[u"care"]
         if u"addressess" in word_vectors:
@@ -208,9 +208,13 @@ class NeuralBeliefTracker:
         if self.device == torch.device("cuda:0"):
             embedding = embedding.cuda()
 
+        # print(self.w2i_dict["request"])
+        # print("request embedding ",embedding(self.long_tensor_type([self.w2i_dict["request"]])))
+
         # embedding = torch.nn.Embedding.from_pretrained(self.float_tensor_type(embedding_value_array, device=self.device))
         # input(embedding)
-        embedding.weight.requires_grad = False
+        # embedding.weight.requires_grad = True
+        # input(embedding.weight.requires_grad)
 
         for slot in dialogue_ontology:
             print("Initialisation of model variables for slot: " + slot)
@@ -387,7 +391,7 @@ class NeuralBeliefTracker:
         val_data = self.generate_examples(target_slot, fv_validation,
                                           positive_examples_validation,
                                           negative_examples_validation, random_positive_count,
-                                          random_negative_count)  # get data split
+                                          random_negative_count)  # otherwise it will be too large get data split
 
         if val_data is None:
             print("val data is none")
@@ -417,10 +421,10 @@ class NeuralBeliefTracker:
                                                     negative_examples, random_positive_count,
                                                     random_negative_count)
 
-                batch_data = val_data  # use the same set of data to train and test
+                batch_data = val_data  # TODO: currently we set this as debug approach, remove this line use the same set of data to train and test
 
                 (batch_xs_full, batch_sys_req, batch_sys_conf_slots, batch_sys_conf_values,
-                 batch_delex, batch_ys, batch_ys_prev) = batch_data
+                 batch_delex, batch_ys, batch_ys_prev, utterance_lens) = batch_data
 
                 # input("training model " + str(self.model_variables[target_slot]))
                 # forward pass, which loss to define
@@ -611,6 +615,7 @@ class NeuralBeliefTracker:
         requested_slot_vectors = []
         confirm_slots = []
         confirm_values = []
+        utterance_lens = []
 
         # let index 6 denote full FV (for conv net). Why is the shape like this?
         for j in range(0, utterance_count):
@@ -620,6 +625,8 @@ class NeuralBeliefTracker:
         print("total utterances len " + str(len(utterances)))
 
         for idx, utterance in enumerate(utterances):
+
+            utterance_len = 0
 
             # full_fv = torch.Tensor(np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32"))
             # np.zeros((self.longest_utterance_length * self.embedding_dim,), dtype="float32")
@@ -705,10 +712,9 @@ class NeuralBeliefTracker:
             confirm_values.append(current_conf_value_vector)
 
             asr_weighted_feature_vectors = []
-
-            asr_count = self.global_var_asr_count  # how many hypothesis do we consider
             asr_mass = 0.0  # total mass
 
+            asr_count = self.global_var_asr_count
             for idx1 in range(0, asr_count):
                 asr_mass += full_asr[idx1][
                     1]  # add up mass over all hypothesis, + full_asr[1][1] + full_asr[2][1] + full_asr[3][1] + full_asr[4][1]
@@ -731,6 +737,7 @@ class NeuralBeliefTracker:
                     # print c_example
                     words_utterance = process_turn_hyp(c_example, "en")  # cleaned text: lowercase and normalize
                     words_utterance = words_utterance.split()
+                    utterance_len = len(words_utterance)
 
                     for word_idx, word in enumerate(words_utterance):
 
@@ -752,6 +759,8 @@ class NeuralBeliefTracker:
                 asr_weighted_feature_vectors.append(
                     full_fv.view(self.longest_utterance_length, self.embedding_dim))  # reshape tensor
 
+            utterance_lens.append(utterance_len)
+
             if len(asr_weighted_feature_vectors) != asr_count:
                 print("Please verify: length of weighted vectors is:", len(asr_weighted_feature_vectors))
 
@@ -769,7 +778,7 @@ class NeuralBeliefTracker:
             list_of_features.append((ngram_feature_vectors[idx],
                                      requested_slot_vectors[idx],
                                      confirm_slots[idx],
-                                     confirm_values[idx],
+                                     confirm_values[idx], utterance_lens[idx]
                                      ))
 
         return list_of_features  # a list of tuples (u, t_q, t_s, t_v), that could be used by equation (1) (9) (10)
@@ -840,19 +849,42 @@ class NeuralBeliefTracker:
         features_full = []
         features_delex = []
         features_previous_state = []
+        utterance_lens = []
 
         # feature vector of the used slot:
         candidate_slot = self.embedding(self.long_tensor_type([self.w2i_dict[str(target_slot)]], device=self.device))
 
         # now go through all examples (positive followed by negative).
-        for idx_example, example in enumerate(examples):
 
+        examples_sorted = []
+        for idx_example, example in enumerate(examples):
             (utterance_idx, utterance, value_idx) = example
 
             utterance_fv = feature_vectors[utterance_idx]  # self.longest_ * self.embedding_dim
 
             # prev belief state is in utterance[5]
+            # prev_belief_state = utterance[5]
+            utterance_len = utterance_fv[4]
+
+            utterance_lens.append(utterance_len)
+            examples_sorted += [(utterance_idx, utterance, value_idx, utterance_len)]
+
+        examples_sorted.sort(key=lambda tup: tup[3], reverse=True)
+        utterance_lens = []
+
+        for idx_example, example in enumerate(examples_sorted):
+
+            # TODO: utterance_length=utterance[3]
+
+            (utterance_idx, utterance, value_idx, utterance_len) = example
+
+            utterance_fv = feature_vectors[utterance_idx]  # self.longest_ * self.embedding_dim
+
+            # prev belief state is in utterance[5]
             prev_belief_state = utterance[5]
+            utterance_len = utterance_fv[4]
+
+            utterance_lens.append(utterance_len)
 
             if idx_example < positive_count:
                 if target_slot != "request":
@@ -928,7 +960,7 @@ class NeuralBeliefTracker:
         # if target_slot == "request" then all zero?
 
         return (features_full, features_requested_slots, features_confirm_slots, \
-                features_confirm_values, features_delex, y_labels, features_previous_state)
+                features_confirm_values, features_delex, y_labels, features_previous_state, utterance_lens)
 
     def test_woz(self):
         override_en_ontology = False

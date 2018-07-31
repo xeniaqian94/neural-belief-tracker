@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import numpy as np
+from torch.nn.utils.rnn import *
 
 
 class NBT_model(nn.Module):
@@ -11,8 +12,11 @@ class NBT_model(nn.Module):
                  value_list=None, longest_utterance_length=40,
                  num_filters=300, drop_out=0.5, lr=1e-4, device=torch.device("cpu")):
         super(NBT_model, self).__init__()
+
         self.slot_emb = embedding(slot_ids)
+
         print("self.slot_emb.shape", self.slot_emb.shape)
+
         self.value_emb = embedding(value_ids)
         # self.slot_value_pair_emb = torch.cat((self.slot_emb, self.value_emb), dim=1)  # cs+cv
         # self.w_candidates = nn.Linear(vector_dimension * 2, vector_dimension, bias=True)  # equation (7) in paper 1
@@ -35,18 +39,27 @@ class NBT_model(nn.Module):
                 target_slot == "request"))  # if request, choose 1 of the 7; if not, has the option of value=None
 
         self.use_delex_features = use_delex_features
+        self.hidden_units = 100  # before equation (11)
         self.filter_sizes = [1, 2, 3]
         self.conv_filters = [None, None, None]
         self.dnn_filters = [None, None, None]
-        self.hidden_units = 100  # before equation (11)
+        self.lstm = nn.LSTM(300, self.hidden_units, batch_first=True, bidirectional=False)
+
+        self.mlp_post_lstm = []
+
+        for i, n in enumerate(range(len(self.value_list))):
+            self.mlp_post_lstm += [
+                nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.Dropout(drop_out), nn.ReLU(),
+                              nn.Linear(50, 1, bias=True), nn.Sigmoid())]
+
         self.float_tensor = float_tensor
         self.long_tensor = long_tensor
 
         for i, n in enumerate(self.filter_sizes):
 
             self.conv_filters[i] = nn.Conv1d(self.vector_dimension, self.num_filters, n, bias=True)
-            self.dnn_filters[i] = nn.Sequential(nn.Sigmoid(),
-                                                nn.Linear(n, 1, bias=True))
+            self.dnn_filters[i] = nn.Sequential(
+                                                nn.Linear(n, 1, bias=True),nn.Sigmoid())
 
             if device == torch.device("cuda:0"):
                 self.conv_filters[i] = self.conv_filters[i].cuda()
@@ -54,15 +67,15 @@ class NBT_model(nn.Module):
 
         # Equation 11
 
-        self.w_hidden_layer_for_d = nn.Sequential(nn.Sigmoid(),
-                                                  nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
+        self.w_hidden_layer_for_d = nn.Sequential(nn.Linear(self.vector_dimension, self.hidden_units, bias=True),
+                                                  nn.Sigmoid())
 
-        self.w_joint_presoftmax = nn.Sequential(nn.Sigmoid(), nn.Linear(self.hidden_units, 1, bias=True))
+        self.w_joint_presoftmax = nn.Sequential(nn.Linear(self.hidden_units, 1, bias=True), nn.Sigmoid())
 
-        self.w_hidden_layer_for_mr = nn.Sequential(nn.Sigmoid(),
-                                                   nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
-        self.w_hidden_layer_for_mc = nn.Sequential(nn.Sigmoid(),
-                                                   nn.Linear(self.vector_dimension, self.hidden_units, bias=True))
+        self.w_hidden_layer_for_mr = nn.Sequential(
+            nn.Linear(self.vector_dimension, self.hidden_units, bias=True), nn.Sigmoid())
+        self.w_hidden_layer_for_mc = nn.Sequential(
+            nn.Linear(self.vector_dimension, self.hidden_units, bias=True), nn.Sigmoid())
 
         if device == torch.device("cuda:0"):
             self.w_hidden_layer_for_d = self.w_hidden_layer_for_d.cuda()
@@ -76,7 +89,7 @@ class NBT_model(nn.Module):
     def define_DNN_model(self, utterance_representation_full):
 
         """
-        Better code for defining the CNN model.
+        Better source for defining the CNN model.
 
 
         utterance_representations_full: shape minibatch_size * seqLen * emb_dim -> reshape to minibatch_size * emb_dim * seqLen
@@ -107,7 +120,7 @@ class NBT_model(nn.Module):
 
     def define_CNN_model(self, utterance_representations_full):
         """
-        Better code for defining the CNN model.
+        Better source for defining the CNN model.
 
 
         utterance_representations_full: shape minibatch_size * seqLen * emb_dim -> reshape to minibatch_size * emb_dim * seqLen
@@ -136,6 +149,35 @@ class NBT_model(nn.Module):
 
         return final_utterance
 
+    def define_LSTM_model(self, utterance_representations_full, utterance_lens):
+
+        """
+        Better source for defining the CNN model.
+
+
+        utterance_representations_full: shape minibatch_size * seqLen * emb_dim -> reshape to minibatch_size * emb_dim * seqLen
+
+        """
+
+        inputTensor = utterance_representations_full[:, :max(utterance_lens), :]
+
+        packedInputTensor = pack_padded_sequence(inputTensor, lengths=self.long_tensor(utterance_lens),
+                                                 batch_first=True)
+
+        outputTensor, (h_n, c_n) = self.lstm(packedInputTensor)  # outputTensor(40,512,100) h_n shape of 2*512*100
+
+        # lastTimestamp=outputTensor[]
+
+        # unpackedOutputTensor,_ = pad_packed_sequence(outputTensor, batch_first=True)
+        # print(utterance_lens - np.ones(len(utterance_lens)))
+        # sentence_representation_full = unpackedOutputTensor[:, utterance_lens - np.ones(len(utterance_lens)), :]
+        # sentence_representation_full_fake = unpackedOutputTensor[:, -1, :]  # should have only first row as 1
+        #
+        # print("inside define_LSTM_model")
+
+        return h_n
+        # return utterance_representations_full
+
     def forward(self, batch_data, keep_prob=0.5):
         """
 
@@ -147,7 +189,7 @@ class NBT_model(nn.Module):
         #  system_act_confirm_values, y_, y_past_state, keep_prob) = batch_data
 
         (utterance_representations_full, system_act_slots, system_act_confirm_slots, system_act_confirm_values,
-         utterance_representation_delex, y_, y_past_state) = batch_data
+         utterance_representation_delex, y_, y_past_state, utterance_lens) = batch_data
 
         # print("within model forward "+str(utterance_representations_full))
 
@@ -165,91 +207,79 @@ class NBT_model(nn.Module):
 
         # final_utterance_representation = self.define_CNN_model(utterance_representations_full)
 
-        final_utterance_representation = self.define_DNN_model(utterance_representations_full)
+        final_utterance_representation = self.define_LSTM_model(utterance_representations_full, utterance_lens)
+        y_list = []
+        for i in range(len(self.value_list)):
+            prediction_i = self.mlp_post_lstm[i](final_utterance_representation)
 
-        # print(final_utterance_representation)
-        # print("selected final_utterance_representation", final_utterance_representation[:3])
+            y_list += [prediction_i]
 
-        # Next, multiply candidates [label_size, vector_dimension] each with the uttereance representations [None, vector_dimension], to get [None, label_size, vector_dimension]
-        # or utterance [None, vector_dimension] X [vector_dimension, label_size] to get [None, label_size]
-        # h_utterance_representation_candidate_interaction = tf.Variable(tf.zeros([None, label_size, vector_dimension]))
+            y_list
 
-        list_of_value_contributions = []
-
-        # get interaction of utterance with each value, element-wise multiply, Equation (8)
-        for batch_idx in range(final_utterance_representation.shape[0]):
-            repeat_utterance = final_utterance_representation[batch_idx].squeeze(1).repeat(
-                [candidates_transform.shape[0], 1])
-
-            list_of_value_contributions.append(torch.addcmul(
-                self.float_tensor(np.zeros([candidates_transform.shape[0], repeat_utterance.shape[1]])),
-                candidates_transform,
-                repeat_utterance))  # candidates_transform.mul(final_utterance_representation[batch_idx]))
-
-        # print("list of contributions[0] shape", list_of_value_contributions[0].shape)
-        list_of_value_contributions = torch.stack(
-            list_of_value_contributions)  # minibatch_size * label_size * vector_dimension
-
-        # y_presoftmax_1 = torch.reshape(self.w_joint_presoftmax(self.w_joint_hidden_layer(list_of_value_contributions)),
-        #                                [-1, list_of_value_contributions.shape[1]])
-
-        y_presoftmax_1 = self.w_joint_presoftmax(
-            F.dropout(self.w_hidden_layer_for_d(list_of_value_contributions), p=self.drop_out, training=self.training))
-
-        # print(y_presoftmax_1.shape, "hopefully is minibatch_size * label_size * vector_dimension")
-
-        # =======================
-        # Calculating sysreq and confirm contribution
-
-        # Equation (9)
-        # system_act_slots = (minibatch_size, vector_dimension)
-
-        # print(self.slot_emb.shape)  # 7*300
-        # print("system_act_slots", system_act_slots.shape)  # 7*300
-        # print("system_act_confirm_slots", system_act_confirm_slots.shape)
-        # print(final_utterance_representation.shape)  # 512 * 300
-
-        m_r = torch.matmul(self.slot_emb.matmul(system_act_slots.t()),
-                           final_utterance_representation.squeeze(2))
-
-        y_presoftmax_2 = self.w_joint_presoftmax(
-            F.dropout(self.w_hidden_layer_for_mr(m_r), p=self.drop_out, training=self.training))
-
-        m_c = torch.matmul(
-            torch.addcmul(self.float_tensor(np.zeros([self.slot_emb.shape[0], system_act_confirm_slots.shape[0]])),
-                          self.slot_emb.matmul(system_act_confirm_slots.t()),
-                          self.value_emb.matmul(system_act_confirm_values.t())),
-            final_utterance_representation.squeeze(2))
-        y_presoftmax_3 = self.w_joint_presoftmax(
-            F.dropout(self.w_hidden_layer_for_mc(m_c), p=self.drop_out, training=self.training))
-
-        # Equation 11 again, lol
-        y_presoftmax = y_presoftmax_1 + y_presoftmax_2 + y_presoftmax_3
-
-        # TODO: 1. modify loss into for-looping multiple label; 2. making sense of the y_combine interpolation
-
+        # list_of_value_contributions = []
+        #
+        # # get interaction of utterance with each value, element-wise multiply, Equation (8)
+        # for batch_idx in range(final_utterance_representation.shape[0]):
+        #     repeat_utterance = final_utterance_representation[batch_idx].squeeze(1).repeat(
+        #         [candidates_transform.shape[0], 1])
+        #
+        #     list_of_value_contributions.append(torch.addcmul(
+        #         self.float_tensor(np.zeros([candidates_transform.shape[0], repeat_utterance.shape[1]])),
+        #         candidates_transform,
+        #         repeat_utterance))  # candidates_transform.mul(final_utterance_representation[batch_idx]))
+        #
+        # # print("list of contributions[0] shape", list_of_value_contributions[0].shape)
+        # list_of_value_contributions = torch.stack(
+        #     list_of_value_contributions)  # minibatch_size * label_size * vector_dimension
+        #
+        # # y_presoftmax_1 = torch.reshape(self.w_joint_presoftmax(self.w_joint_hidden_layer(list_of_value_contributions)),
+        # #                                [-1, list_of_value_contributions.shape[1]])
+        #
+        # y_presoftmax_1 = self.w_joint_presoftmax(
+        #     F.dropout(self.w_hidden_layer_for_d(list_of_value_contributions), p=self.drop_out, training=self.training))
+        #
+        # # input(self.slot_emb)
+        # m_r = torch.matmul(self.slot_emb.matmul(system_act_slots.t()),
+        #                    final_utterance_representation.squeeze(2))
+        #
+        # y_presoftmax_2 = self.w_joint_presoftmax(
+        #     F.dropout(self.w_hidden_layer_for_mr(m_r), p=self.drop_out, training=self.training))
+        #
+        # m_c = torch.matmul(
+        #     torch.addcmul(self.float_tensor(np.zeros([self.slot_emb.shape[0], system_act_confirm_slots.shape[0]])),
+        #                   self.slot_emb.matmul(system_act_confirm_slots.t()),
+        #                   self.value_emb.matmul(system_act_confirm_values.t())),
+        #     final_utterance_representation.squeeze(2))
+        # y_presoftmax_3 = self.w_joint_presoftmax(
+        #     F.dropout(self.w_hidden_layer_for_mc(m_c), p=self.drop_out, training=self.training))
+        #
+        # # Equation 11 again, lol
+        # y_presoftmax = y_presoftmax_1 + y_presoftmax_2 + y_presoftmax_3
+        #
+        # # TODO: 1. modify loss into for-looping multiple label; 2. making sense of the y_combine interpolation
+        #
+        # # if self.use_softmax:
+        # #     append_zeros_none = torch.Tensor(np.zeros([y_presoftmax_1.shape[0], 1, y_presoftmax_1.shape[2]]))
+        # #     y_presoftmax = torch.cat((y_presoftmax, append_zeros_none), dim=1)
+        #
+        # if self.use_delex_features:
+        #     y_presoftmax = y_presoftmax + utterance_representation_delex
+        #
         # if self.use_softmax:
-        #     append_zeros_none = torch.Tensor(np.zeros([y_presoftmax_1.shape[0], 1, y_presoftmax_1.shape[2]]))
-        #     y_presoftmax = torch.cat((y_presoftmax, append_zeros_none), dim=1)
-
-        if self.use_delex_features:
-            y_presoftmax = y_presoftmax + utterance_representation_delex
-
-        if self.use_softmax:
-            # print("Tensor of size (mini_batch_size,label_count)?")
-            # input(y_past_state.shape)
-            # input(y_presoftmax.shape)
-            y = self.combine_coefficient * y_presoftmax.squeeze(2) + (1 - self.combine_coefficient) * y_past_state
-            # y = F.softmax(y_combine, dim=1)
-            print("predicting non-request prior-softmax, loss is CrossEntropy")
-
-        else:
-            y = F.sigmoid(y_presoftmax).squeeze(2)  # comparative max is okay?
-            print("predicting request with sigmoid, loss is L2-MSE")
-
-        print("f_pred", y)
-
-        return y
+        #     # print("Tensor of size (mini_batch_size,label_count)?")
+        #     # input(y_past_state.shape)
+        #     # input(y_presoftmax.shape)
+        #     y = self.combine_coefficient * y_presoftmax.squeeze(2) + (1 - self.combine_coefficient) * y_past_state
+        #     # y = F.softmax(y_combine, dim=1)
+        #     print("predicting non-request prior-softmax, loss is CrossEntropy")
+        #
+        # else:
+        #     y = F.sigmoid(y_presoftmax).squeeze(2)  # comparative max is okay?
+        #     print("predicting request with sigmoid, loss is L2-MSE")
+        #
+        # print("f_pred", y)
+        #
+        # return y
 
     def eval_model(self, val_data):
 

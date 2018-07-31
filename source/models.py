@@ -4,7 +4,7 @@ import tensorflow as tf
 
 def define_CNN_model(utterance_representations_full, num_filters=300, vector_dimension=300, longest_utterance_length=40):
     """
-    Better code for defining the CNN model. 
+    Better source for defining the CNN model.
     """
     filter_sizes = [1, 2, 3]
     hidden_representation = tf.zeros([num_filters], tf.float32)
