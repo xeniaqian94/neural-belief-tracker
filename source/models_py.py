@@ -45,12 +45,27 @@ class NBT_model(nn.Module):
         self.dnn_filters = [None, None, None]
         self.lstm = nn.LSTM(300, self.hidden_units, batch_first=True, bidirectional=False)
 
-        self.mlp_post_lstm = []
+        # self.mlp_post_lstm = []
+        #
+        # for i, n in enumerate(range(len(self.value_list))):
+        #     self.mlp_post_lstm += [
+        #         nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+        #                       nn.Linear(50, 1, bias=True), nn.Sigmoid())]
 
-        for i, n in enumerate(range(len(self.value_list))):
-            self.mlp_post_lstm += [
-                nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.Dropout(drop_out), nn.ReLU(),
-                              nn.Linear(50, 1, bias=True), nn.Sigmoid())]
+        self.mlp_post_lstm0 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, 2, bias=True))
+        self.mlp_post_lstm1 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, 2, bias=True))
+        self.mlp_post_lstm2 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, 2, bias=True))
+        self.mlp_post_lstm3 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, 2, bias=True))
+        self.mlp_post_lstm4 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, 2, bias=True))
+        self.mlp_post_lstm5 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, 2, bias=True))
+        self.mlp_post_lstm6 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, 2, bias=True))
 
         self.float_tensor = float_tensor
         self.long_tensor = long_tensor
@@ -59,7 +74,7 @@ class NBT_model(nn.Module):
 
             self.conv_filters[i] = nn.Conv1d(self.vector_dimension, self.num_filters, n, bias=True)
             self.dnn_filters[i] = nn.Sequential(
-                                                nn.Linear(n, 1, bias=True),nn.Sigmoid())
+                nn.Linear(n, 1, bias=True), nn.Sigmoid())
 
             if device == torch.device("cuda:0"):
                 self.conv_filters[i] = self.conv_filters[i].cuda()
@@ -205,17 +220,69 @@ class NBT_model(nn.Module):
         # print("current target slot is "+self.target_slot)
         # input("c_size "+str(c.shape))
 
+        # TODO: cross experiment one of the three variants
         # final_utterance_representation = self.define_CNN_model(utterance_representations_full)
-
+        # final_utterance_representation = self.define_DNN_model(utterance_representations_full)
         final_utterance_representation = self.define_LSTM_model(utterance_representations_full, utterance_lens)
-        y_list = []
-        for i in range(len(self.value_list)):
-            prediction_i = self.mlp_post_lstm[i](final_utterance_representation)
 
-            y_list += [prediction_i]
+        print(y_)
+        final_utterance_representation = final_utterance_representation.squeeze(0)
+        y_list = self.long_tensor(np.zeros([final_utterance_representation.shape[0], len(self.value_list)]))
 
-            y_list
+        # for i in range(len(self.value_list)):
 
+        # y_list[:, 0] = self.mlp_post_lstm0(final_utterance_representation).squeeze(0)
+        # y_list[:, 1] = self.mlp_post_lstm1(final_utterance_representation).squeeze(0)
+        # y_list[:, 2] = self.mlp_post_lstm2(final_utterance_representation).squeeze(0)
+        # y_list[:, 3] = self.mlp_post_lstm3(final_utterance_representation).squeeze(0)
+        # y_list[:, 4] = self.mlp_post_lstm4(final_utterance_representation).squeeze(0)
+        # y_list[:, 5] = self.mlp_post_lstm5(final_utterance_representation).squeeze(0)
+        # y_list[:, 6] = self.mlp_post_lstm6(final_utterance_representation).squeeze(0)
+
+        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+        pred0 = self.mlp_post_lstm0(final_utterance_representation)
+        loss = loss_func(pred0, y_[:, 0].long())
+
+        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+        pred1 = self.mlp_post_lstm1(final_utterance_representation)
+        loss += loss_func(pred1, y_[:, 1].long())
+
+        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+        pred2 = self.mlp_post_lstm2(final_utterance_representation)
+        loss += loss_func(pred2, y_[:, 2].long())
+
+        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+        pred3 = self.mlp_post_lstm3(final_utterance_representation)
+        loss += loss_func(pred3, y_[:, 3].long())
+
+        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+        pred4 = self.mlp_post_lstm4(final_utterance_representation)
+        loss += loss_func(pred4, y_[:, 4].long())
+
+        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+        pred5 = self.mlp_post_lstm5(final_utterance_representation)
+        loss += loss_func(pred5, y_[:, 5].long())
+
+        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+        pred6 = self.mlp_post_lstm6(final_utterance_representation)
+        loss += loss_func(pred6, y_[:, 6].long())
+
+        # prediction_i = self.mlp_post_lstm[i](final_utterance_representation)
+
+        # y_list += [prediction_i.squeeze(0).squeeze(1)]
+
+        # return torch.stack(y_list).permute(1, 0)
+        # return y_list.permute(1, 0)
+
+        softmax_layer = nn.Softmax(dim=1)
+
+        return torch.stack(
+            [softmax_layer(pred0)[:, 1], softmax_layer(pred1)[:, 1], softmax_layer(pred2)[:, 1],
+             softmax_layer(pred3)[:, 1], softmax_layer(pred4)[:, 1], softmax_layer(pred5)[:, 1],
+             softmax_layer(pred6)[:, 1]]).permute(1,
+                                                  0), loss
+
+        #
         # list_of_value_contributions = []
         #
         # # get interaction of utterance with each value, element-wise multiply, Equation (8)
@@ -287,11 +354,11 @@ class NBT_model(nn.Module):
         # input("setting to eval mode " + str(self.training))
 
         (val_xs_full, val_sys_req, val_sys_conf_slots, val_sys_conf_values,
-         val_delex, val_ys, val_ys_prev) = val_data
+         val_delex, val_ys, val_ys_prev, val_xs_lens) = val_data
 
         print("val_xs_full shape  getting forwarded" + str(val_xs_full.shape))
 
-        f_pred = self.forward(val_data)
+        f_pred, loss = self.forward(val_data)
 
         print("forward finished")
 
