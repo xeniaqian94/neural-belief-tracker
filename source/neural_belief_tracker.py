@@ -361,8 +361,8 @@ class NeuralBeliefTracker:
         feature_vectors, positive_examples, negative_examples = self.generate_data(utterances_train, target_slot)
 
         print("Generating data for validation set:")
-        print("positive examples", positive_examples)
-        print("negative examples", negative_examples)
+        # print("positive examples", positive_examples)
+        # print("negative examples", negative_examples)
         # same for validation (can pre-compute full representation, will be used after each epoch):
         fv_validation, positive_examples_validation, negative_examples_validation = \
             self.generate_data(utterances_val, target_slot)
@@ -421,7 +421,7 @@ class NeuralBeliefTracker:
                                                     negative_examples, random_positive_count,
                                                     random_negative_count)
 
-                batch_data = val_data  # TODO: currently we set this as debug approach, remove this line use the same set of data to train and test
+                # batch_data = val_data  # TODO: currently we set this as debug approach, remove this line use the same set of data to train and test
 
                 (batch_xs_full, batch_sys_req, batch_sys_conf_slots, batch_sys_conf_values,
                  batch_delex, batch_ys, batch_ys_prev, utterance_lens) = batch_data
@@ -455,16 +455,16 @@ class NeuralBeliefTracker:
                 # print("minibatch ", batch_ind, "loss", loss)
 
                 batch_ys_pred, loss = self.model_variables[target_slot](batch_data)
-                print("batch_ys_pred", batch_ys_pred)
-                print("batch_ys", batch_ys)
-                print("minibatch ", batch_ind, "loss", loss)
+                # print("batch_ys_pred", batch_ys_pred)
+                # print("batch_ys", batch_ys)
+                # print("minibatch ", batch_ind, "loss", loss)
                 loss.backward()
 
                 optimizer.step()
-                print("self.model_variables[target_slot].mlp_post_lstm[0][0].weight",
-                      self.model_variables[target_slot].mlp_post_lstm0[0].weight)
-                print("self.model_variables[target_slot].mlp_post_lstm[0][2].weight",
-                      self.model_variables[target_slot].mlp_post_lstm0[2].weight)
+                # print("self.model_variables[target_slot].mlp_post_lstm[0][0].weight",
+                #       self.model_variables[target_slot].mlp_post_lstm0[0].weight)
+                # print("self.model_variables[target_slot].mlp_post_lstm[0][2].weight",
+                #       self.model_variables[target_slot].mlp_post_lstm0[2].weight)
 
             if epoch % 5 == 0 or epoch == 1:
                 if epoch == 1:
@@ -556,7 +556,7 @@ class NeuralBeliefTracker:
         positive_examples = {}
         negative_examples = {}
 
-        list_of_slots = [target_slot]  # never used?
+        list_of_slots = [target_slot]  # list_of_slots is the slot that we cared about
         # list_of_slots = dialogue_ontology.keys()  # ["food", "area", "price range", "request"] ???
 
         for slot_idx, slot in enumerate(list_of_slots):
@@ -586,10 +586,9 @@ class NeuralBeliefTracker:
                             4]:  # utterances are ((trans, asr), sys_req_act, sys_conf, labels)
                             positive_examples[slot].append((utterance_idx, utterance, value_idx))
                             # print "POS:", utterance_idx, utterance, value_idx, value
-                        else:
-                            if not slot_expressed_in_utterance:
-                                negative_examples[slot].append((utterance_idx, utterance, value_idx))
-                                # print "NEG:", utterance_idx, utterance, value_idx, value
+                        elif not slot_expressed_in_utterance:
+                            negative_examples[slot].append((utterance_idx, utterance, value_idx))
+                            # print "NEG:", utterance_idx, utterance, value_idx, value
 
                 elif slot == "request":
 
@@ -807,11 +806,12 @@ class NeuralBeliefTracker:
         neg_example_count = len(negative_examples[target_slot])
 
         if target_slot != "request":
-            label_count = len(self.dialogue_ontology[target_slot]) + 1  # NONE
-            print("target_slot label_count is " + str(label_count) + " pos_count " + str(
-                pos_example_count) + " neg_count " + str(neg_example_count))
+            label_count = len(self.dialogue_ontology[target_slot]) + 1  # plus NONE
         else:
             label_count = len(self.dialogue_ontology[target_slot])
+
+        print("target_slot label_count is " + str(label_count) + " total pos_example_count " + str(
+            pos_example_count) + " neg_example_count " + str(neg_example_count))
 
         # doing_validation = False   # for validation?
         if positive_count is None:
@@ -830,26 +830,28 @@ class NeuralBeliefTracker:
         negative_indices = []
 
         if positive_count > 0:  # select only positive_count number of instances
-            positive_indices = np.random.choice(pos_example_count, positive_count)
+            positive_indices = np.random.choice(pos_example_count, min(pos_example_count, positive_count),
+                                                replace=False)
         else:
             print(target_slot, positive_count, negative_count)
 
         if negative_count > 0:
-            negative_indices = np.random.choice(neg_example_count, negative_count)  # with replacement
+            negative_indices = np.random.choice(neg_example_count, min(negative_count, neg_example_count),
+                                                replace=False)  # with replacement
 
         examples = []
         labels = []
         prev_labels = []
 
-        pos_index = 1
-        neg_index = 0
+        pos_id = 1
+        neg_id = 0
 
         for idx in positive_indices:
-            examples.append([positive_examples[target_slot][idx], pos_index])
+            examples.append([positive_examples[target_slot][idx], pos_id])
             # print("these are positive examples ",positive_examples[target_slot][idx])
         if negative_count > 0:
             for idx in negative_indices:
-                examples.append([negative_examples[target_slot][idx], neg_index])
+                examples.append([negative_examples[target_slot][idx], neg_id])
 
         value_count = len(self.dialogue_ontology[target_slot])
 
@@ -857,8 +859,6 @@ class NeuralBeliefTracker:
         features_requested_slots = []
         features_confirm_slots = []
         features_confirm_values = []
-        features_slot = []
-        features_values = []
         features_full = []
         features_delex = []
         features_previous_state = []
@@ -891,6 +891,9 @@ class NeuralBeliefTracker:
 
             (utterance_idx, utterance, value_idx, utterance_len, pos_neg_index) = example
 
+            # if value_idx==91:
+            #     print()
+
             # if pos_neg_index == neg_index:
             #     print("in negative example construction")
 
@@ -904,7 +907,7 @@ class NeuralBeliefTracker:
 
             if target_slot != "request":
 
-                if pos_neg_index == pos_index:
+                if pos_neg_index == pos_id:
                     labels.append(value_idx)  # includes dontcare
                 else:
                     labels.append(
@@ -946,6 +949,7 @@ class NeuralBeliefTracker:
                     prev_belief_state_vector[self.dialogue_ontology[target_slot].index(prev_value)] = 1
 
             features_previous_state.append(prev_belief_state_vector)
+            features_previous_state.append(prev_belief_state_vector)
 
         # TODO: change to torch Tensor
         features_requested_slots = torch.stack(features_requested_slots)
@@ -956,11 +960,11 @@ class NeuralBeliefTracker:
         features_previous_state = torch.stack(features_previous_state)
 
         if target_slot != "request":
-            y_labels = self.float_tensor_type(np.zeros(positive_count + negative_count, dtype="float32"),
+            y_labels = self.float_tensor_type(np.zeros(len(labels), dtype="float32"),
                                               device=self.device)
         else:
             y_labels = self.float_tensor_type(
-                np.zeros((positive_count + negative_count, label_count), dtype="float32"),
+                np.zeros((len(labels), label_count), dtype="float32"),
                 device=self.device)
 
         for idx in range(0, len(labels)):
@@ -969,10 +973,10 @@ class NeuralBeliefTracker:
             else:
                 y_labels[idx, :] = labels[idx]
 
-        if target_slot != "request":
-            y_labels[
-            positive_count:] = label_count - 1  # NONE, 0-indexing, starting from index positive_count, all are negative cases
-            # input(label_count-1)
+        # if target_slot != "request":
+        #     y_labels[
+        #     positive_count:] = label_count - 1  # NONE, 0-indexing, starting from index positive_count, all are negative cases
+        # input(label_count-1)
 
         # if target_slot == "request" then all zero?
 

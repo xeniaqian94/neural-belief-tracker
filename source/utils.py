@@ -205,7 +205,7 @@ def process_woz_dialogue(woz_dialogue, language, override_en_ontology):
                 current_conf_slot.append("request")
                 current_conf_value.append(each_da)
             else:
-                if type(each_da) is list:   # e.g. [["area","dontcare"]]
+                if type(each_da) is list:  # e.g. [["area","dontcare"]]
                     current_conf_slot.append(each_da[0])
                     current_conf_value.append(each_da[1])
 
@@ -237,7 +237,10 @@ def process_woz_dialogue(woz_dialogue, language, override_en_ontology):
 
         current_labels = turn["turn_label"]
 
-        current_bs = deepcopy(prev_belief_state)
+        # current_bs = deepcopy(prev_belief_state)
+
+        # TODO: this line is for debug, see Things 3
+        current_bs = deepcopy(null_bs)
 
         # print "=====", prev_belief_state
         if "request" in prev_belief_state:
@@ -325,12 +328,12 @@ def load_woz_data(file_path, language, percentage=1.0, override_en_ontology=Fals
     return (dialogues, training_turns)
 
 
-def binary_mask(example, requestable_count,tensor_type=torch.FloatTensor):
+def binary_mask(example, requestable_count, tensor_type=torch.FloatTensor):
     """
     takes a list, i.e. 2,3,4, and if req count is 8, returns: 00111000
     """
 
-    zeros =tensor_type(np.zeros((requestable_count,), dtype=np.float32))
+    zeros = tensor_type(np.zeros((requestable_count,), dtype=np.float32))
     for x in example:
         zeros[x] = 1
 
@@ -351,7 +354,7 @@ def delexicalise_utterance_values(utterance, target_slot, target_values):
     else:
         value_count = len(target_values) + 1
 
-    delexicalised_vector = torch.FloatTensor(np.zeros((value_count,),dtype="float32"))
+    delexicalised_vector = torch.FloatTensor(np.zeros((value_count,), dtype="float32"))
 
     for idx, target_value in enumerate(target_values):
         if " " + target_value + " " in utterance:

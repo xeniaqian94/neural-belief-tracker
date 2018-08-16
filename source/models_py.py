@@ -67,6 +67,9 @@ class NBT_model(nn.Module):
         self.mlp_post_lstm6 = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
                                             nn.Linear(50, 2, bias=True))
 
+        self.mlp_post_lstmn = nn.Sequential(nn.Linear(self.hidden_units, 50, bias=True), nn.ReLU(),
+                                            nn.Linear(50, len(self.value_list) + 1, bias=True))
+
         self.float_tensor = float_tensor
         self.long_tensor = long_tensor
 
@@ -225,9 +228,7 @@ class NBT_model(nn.Module):
         # final_utterance_representation = self.define_DNN_model(utterance_representations_full)
         final_utterance_representation = self.define_LSTM_model(utterance_representations_full, utterance_lens)
 
-        print(y_)
         final_utterance_representation = final_utterance_representation.squeeze(0)
-        y_list = self.long_tensor(np.zeros([final_utterance_representation.shape[0], len(self.value_list)]))
 
         # for i in range(len(self.value_list)):
 
@@ -238,49 +239,66 @@ class NBT_model(nn.Module):
         # y_list[:, 4] = self.mlp_post_lstm4(final_utterance_representation).squeeze(0)
         # y_list[:, 5] = self.mlp_post_lstm5(final_utterance_representation).squeeze(0)
         # y_list[:, 6] = self.mlp_post_lstm6(final_utterance_representation).squeeze(0)
+        if self.target_slot == "request":
 
-        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
-        pred0 = self.mlp_post_lstm0(final_utterance_representation)
-        loss = loss_func(pred0, y_[:, 0].long())
+            loss_func = nn.CrossEntropyLoss(
+                weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+            pred0 = self.mlp_post_lstm0(final_utterance_representation)
+            loss = loss_func(pred0, y_[:, 0].long())
 
-        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
-        pred1 = self.mlp_post_lstm1(final_utterance_representation)
-        loss += loss_func(pred1, y_[:, 1].long())
+            loss_func = nn.CrossEntropyLoss(
+                weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+            pred1 = self.mlp_post_lstm1(final_utterance_representation)
+            loss += loss_func(pred1, y_[:, 1].long())
 
-        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
-        pred2 = self.mlp_post_lstm2(final_utterance_representation)
-        loss += loss_func(pred2, y_[:, 2].long())
+            loss_func = nn.CrossEntropyLoss(
+                weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+            pred2 = self.mlp_post_lstm2(final_utterance_representation)
+            loss += loss_func(pred2, y_[:, 2].long())
 
-        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
-        pred3 = self.mlp_post_lstm3(final_utterance_representation)
-        loss += loss_func(pred3, y_[:, 3].long())
+            loss_func = nn.CrossEntropyLoss(
+                weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+            pred3 = self.mlp_post_lstm3(final_utterance_representation)
+            loss += loss_func(pred3, y_[:, 3].long())
 
-        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
-        pred4 = self.mlp_post_lstm4(final_utterance_representation)
-        loss += loss_func(pred4, y_[:, 4].long())
+            loss_func = nn.CrossEntropyLoss(
+                weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+            pred4 = self.mlp_post_lstm4(final_utterance_representation)
+            loss += loss_func(pred4, y_[:, 4].long())
 
-        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
-        pred5 = self.mlp_post_lstm5(final_utterance_representation)
-        loss += loss_func(pred5, y_[:, 5].long())
+            loss_func = nn.CrossEntropyLoss(
+                weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+            pred5 = self.mlp_post_lstm5(final_utterance_representation)
+            loss += loss_func(pred5, y_[:, 5].long())
 
-        loss_func = nn.CrossEntropyLoss(weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
-        pred6 = self.mlp_post_lstm6(final_utterance_representation)
-        loss += loss_func(pred6, y_[:, 6].long())
+            loss_func = nn.CrossEntropyLoss(
+                weight=self.float_tensor([y_[:, 0].long().sum(), (1 - y_[:, 0].long()).sum()]))
+            pred6 = self.mlp_post_lstm6(final_utterance_representation)
+            loss += loss_func(pred6, y_[:, 6].long())
 
-        # prediction_i = self.mlp_post_lstm[i](final_utterance_representation)
+            # prediction_i = self.mlp_post_lstm[i](final_utterance_representation)
 
-        # y_list += [prediction_i.squeeze(0).squeeze(1)]
+            # y_list += [prediction_i.squeeze(0).squeeze(1)]
 
-        # return torch.stack(y_list).permute(1, 0)
-        # return y_list.permute(1, 0)
+            # return torch.stack(y_list).permute(1, 0)
+            # return y_list.permute(1, 0)
 
-        softmax_layer = nn.Softmax(dim=1)
+            softmax_layer = nn.Softmax(dim=1)
+            prediction = torch.stack(
+                [softmax_layer(pred0)[:, 1], softmax_layer(pred1)[:, 1], softmax_layer(pred2)[:, 1],
+                 softmax_layer(pred3)[:, 1], softmax_layer(pred4)[:, 1], softmax_layer(pred5)[:, 1],
+                 softmax_layer(pred6)[:, 1]]).permute(1,
+                                                      0)
+        else:
+            weight = self.float_tensor([(1 / ((y_ == i).sum().float()) if (y_ == i).sum() != 0 else 0) for i in
+                                        range(len(self.value_list) + 1)])
+            loss_func = nn.CrossEntropyLoss(weight=weight)
+            pred = self.mlp_post_lstmn(final_utterance_representation)
+            loss = loss_func(pred, y_.long())
+            softmax_layer = nn.Softmax(dim=1)
+            prediction = softmax_layer(pred)
 
-        return torch.stack(
-            [softmax_layer(pred0)[:, 1], softmax_layer(pred1)[:, 1], softmax_layer(pred2)[:, 1],
-             softmax_layer(pred3)[:, 1], softmax_layer(pred4)[:, 1], softmax_layer(pred5)[:, 1],
-             softmax_layer(pred6)[:, 1]]).permute(1,
-                                                  0), loss
+        return prediction, loss
 
         #
         # list_of_value_contributions = []
@@ -371,33 +389,36 @@ class NBT_model(nn.Module):
 
         if self.use_softmax:
             predictions = f_pred.argmax(1)
-            predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, predictions.unsqueeze(1).long(),
-                                                                                     1)
 
-            true_predictions = val_ys.float()
-            true_predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, true_predictions.unsqueeze(
-                1).long(), 1)
+            correct_prediction = (predictions.long() == val_ys.long()).float()
+            accuracy = np.asscalar(correct_prediction.mean().data.numpy())
 
-            correct_prediction = (predictions.long() == true_predictions.long()).float()
-            accuracy = correct_prediction.mean()
+            # predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, predictions.unsqueeze(1).long(), 1)
 
-            precision = 0.0
-            recall = 0.0
-
-            for ind in range(f_pred.shape[1]):
-                num_positives = true_predictions_one_hot[ind].sum()
-                classified_positives = predictions_one_hot[ind].sum()
-                true_positives = true_predictions_one_hot[ind] * predictions_one_hot[ind]
-                num_true_positives = true_positives.sum()
-                precision += (0 if np.asscalar(classified_positives.data.numpy()) == 0 else np.asscalar(
-                    (1.0 * num_true_positives / classified_positives).data.numpy()))
-                recall += (0 if np.asscalar(num_positives.data.numpy()) == 0 else np.asscalar(
-                    (1.0 * num_true_positives / num_positives).data.numpy()))
-
-            precision = precision / f_pred.shape[1]
-            recall = recall / f_pred.shape[1]
-            f_score = torch.Tensor([0]) if (recall + precision) == 0 else torch.Tensor(
-                [(2 * recall * precision) / (recall + precision)])
+            # true_predictions = val_ys.float()
+            # true_predictions_one_hot = self.float_tensor(np.zeros(f_pred.shape)).scatter_(1, true_predictions.unsqueeze(
+            #     1).long(), 1)
+            #
+            # correct_prediction = (predictions.long() == true_predictions.long()).float()
+            # accuracy = correct_prediction.mean()
+            #
+            # precision = 0.0
+            # recall = 0.0
+            #
+            # for ind in range(f_pred.shape[1]):
+            #     num_positives = true_predictions_one_hot[ind].sum()
+            #     classified_positives = predictions_one_hot[ind].sum()
+            #     true_positives = true_predictions_one_hot[ind] * predictions_one_hot[ind]
+            #     num_true_positives = true_positives.sum()
+            #     precision += (0 if np.asscalar(classified_positives.data.numpy()) == 0 else np.asscalar(
+            #         (1.0 * num_true_positives / classified_positives).data.numpy()))
+            #     recall += (0 if np.asscalar(num_positives.data.numpy()) == 0 else np.asscalar(
+            #         (1.0 * num_true_positives / num_positives).data.numpy()))
+            #
+            # precision = precision / f_pred.shape[1]
+            # recall = recall / f_pred.shape[1]
+            # f_score = torch.Tensor([0]) if (recall + precision) == 0 else torch.Tensor(
+            #     [(2 * recall * precision) / (recall + precision)])
 
         else:
             predictions = f_pred.round()
